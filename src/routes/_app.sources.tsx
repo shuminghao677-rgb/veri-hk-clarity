@@ -4,12 +4,16 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { officialSources } from "@/lib/mock-data";
+import { SourceIcon } from "@/components/verihk/SourceIcon";
 
 export const Route = createFileRoute("/_app/sources")({
   head: () => ({
     meta: [
       { title: "Official Sources — VeriHK" },
-      { name: "description", content: "Every trusted Hong Kong government source VeriHK verifies against." },
+      {
+        name: "description",
+        content: "Every trusted Hong Kong government source VeriHK verifies against.",
+      },
       { property: "og:title", content: "Official Sources — VeriHK" },
     ],
   }),
@@ -21,25 +25,29 @@ function SourcesPage() {
     <div className="mx-auto max-w-6xl px-4 py-10 md:px-8 md:py-14">
       <div className="mb-10 max-w-2xl">
         <div className="inline-flex items-center gap-2 rounded-full border bg-background/60 px-3 py-1 text-[11px] font-medium text-muted-foreground">
-          <Landmark className="h-3 w-3 text-primary" /> Verified Data Providers
+          <Landmark className="h-3 w-3 text-primary" /> Up-to-date official sources
         </div>
         <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">Official Sources</h1>
         <p className="mt-2 text-muted-foreground">
-          Every claim is cross-checked against these trusted HKSAR government data providers.
+          Every claim is cross-checked against these HKSAR government data providers. Names and
+          logos are used for identification only — VeriHK is not affiliated with any department.
         </p>
       </div>
 
       <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
         {officialSources.map((s) => (
           <Card
-            key={s.name}
+            key={s.key}
             className="group flex h-full flex-col rounded-3xl border-border/60 p-6 shadow-soft transition-all hover:-translate-y-1 hover:shadow-elegant"
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl gradient-primary text-base font-bold text-white shadow-elegant">
-                {s.logo}
+              <div className="grid h-12 w-12 place-items-center rounded-2xl border border-border/70 bg-muted/60 text-foreground/80">
+                <SourceIcon sourceKey={s.key} className="h-5 w-5" />
               </div>
-              <Badge variant="outline" className="gap-1 rounded-full border-success/30 bg-success/10 text-success">
+              <Badge
+                variant="outline"
+                className="gap-1 rounded-full border-success/30 bg-success/10 text-success"
+              >
                 <BadgeCheck className="h-3 w-3" /> Official
               </Badge>
             </div>

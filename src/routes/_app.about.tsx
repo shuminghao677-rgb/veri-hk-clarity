@@ -36,6 +36,11 @@ function AboutPage() {
           VeriHK is an AI-powered fact verification platform that grounds every answer in official
           Hong Kong government data — with reasoning users can inspect, cite, and share.
         </p>
+        <div className="mt-5 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
+          <span className="font-semibold">Prototype notice.</span>{" "}
+          Competition prototype using representative demonstration data. Names and marks of
+          Hong Kong government departments are used for identification only.
+        </div>
       </div>
 
       <Section icon={Target} title="Mission">
@@ -99,7 +104,7 @@ function AboutPage() {
         <ol className="relative space-y-5 border-l border-border/70 pl-6">
           {[
             { q: "Q3 2026", t: "Bilingual reports", d: "Full 繁體中文 and English side-by-side verification reports." },
-            { q: "Q4 2026", t: "Realtime alerts", d: "Subscribe to topics and get notified when official sources contradict trending claims." },
+            { q: "Q4 2026", t: "Timely topic alerts", d: "Subscribe to topics and get notified when official sources contradict trending claims." },
             { q: "Q1 2027", t: "Public API", d: "Programmatic access for newsrooms, government units and research teams." },
           ].map((s, i) => (
             <li key={i} className="relative">

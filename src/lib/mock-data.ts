@@ -1,276 +1,373 @@
 export type ClaimStatus = "supported" | "refuted" | "insufficient";
 
+export type EvidenceType =
+  | "Official structured data"
+  | "Government announcement"
+  | "RSS notice"
+  | "Supporting evidence";
+
+export type SourceKey = "hko" | "td" | "edb" | "govnews" | "datagov" | "dsd";
+
+export interface OfficialSource {
+  key: SourceKey;
+  name: string;
+  shortName: string;
+  type: string;
+  description: string;
+  url: string;
+  updated: string;
+}
+
+export interface Evidence {
+  id: string;
+  sourceKey: SourceKey;
+  evidenceType: EvidenceType;
+  publishedAt: string;
+  updatedAt: string;
+  summary: string;
+  citation: string;
+  url: string;
+}
+
+export interface ClaimExplanation {
+  officialEvidence: string;
+  sourceConsistency: string;
+  verdictExplanation: string;
+  recommendation: string;
+}
+
 export interface Claim {
   id: string;
   text: string;
   status: ClaimStatus;
   confidence: number;
   evidenceIds: string[];
-  reasoning: string[];
+  explanation: ClaimExplanation;
 }
 
-export interface Evidence {
+export interface VerificationReport {
   id: string;
-  source: string;
-  sourceType: string;
-  publishedAt: string;
-  updatedAt: string;
-  summary: string;
-  citation: string;
-  url: string;
-  logo: string;
+  input: string;
+  claimsDetected: number;
+  sourcesConsulted: number;
+  evidenceCoverage: "High" | "Medium" | "Low";
+  lastCheckedAt: string;
+  claims: Claim[];
 }
 
-export const uploadedContent = `Heavy rain warning issued by the Hong Kong Observatory for Hong Kong Island and Kowloon districts. According to a circulating message, all schools will suspend classes tomorrow, and significant traffic disruption is expected across Kowloon due to flooded roads and MTR delays.`;
+export interface HistoryReport {
+  id: string;
+  date: string;
+  title: string;
+  claims: number;
+  supported: number;
+  refuted: number;
+  insufficient: number;
+  confidence: number;
+}
 
-export const evidence: Evidence[] = [
-  {
-    id: "e1",
-    source: "Hong Kong Observatory",
-    sourceType: "Weather API",
-    publishedAt: "2025-07-13 21:40",
-    updatedAt: "2025-07-14 06:12",
-    summary:
-      "Amber rainstorm warning signal in force. Heavy rain expected to persist across Hong Kong Island and Kowloon for the next 6 hours.",
-    citation:
-      "The Amber Rainstorm Warning Signal is now in force. Members of the public should stay alert and take necessary precautions.",
-    url: "https://www.hko.gov.hk",
-    logo: "HKO",
-  },
-  {
-    id: "e2",
-    source: "Education Bureau",
-    sourceType: "Announcements",
-    publishedAt: "2025-07-14 05:55",
-    updatedAt: "2025-07-14 06:00",
-    summary:
-      "As of 06:00, EDB has NOT announced any class suspension for tomorrow. Schools will operate on regular schedule unless a Black Rainstorm or T8 signal is raised.",
-    citation:
-      "Classes for all day-schools remain as scheduled. Parents should refer to official EDB channels for updates.",
-    url: "https://www.edb.gov.hk",
-    logo: "EDB",
-  },
-  {
-    id: "e3",
-    source: "Transport Department",
-    sourceType: "Traffic Notices",
-    publishedAt: "2025-07-14 05:30",
-    updatedAt: "2025-07-14 06:20",
-    summary:
-      "Multiple road flooding incidents reported in Kowloon: Waterloo Road, Boundary Street and parts of Nathan Road. Traffic diversions in effect.",
-    citation:
-      "Motorists are advised to avoid low-lying areas in Kowloon and allow additional travel time.",
-    url: "https://www.td.gov.hk",
-    logo: "TD",
-  },
-  {
-    id: "e4",
-    source: "Government News",
-    sourceType: "Press Release",
-    publishedAt: "2025-07-14 06:05",
-    updatedAt: "2025-07-14 06:05",
-    summary:
-      "Inter-departmental coordination activated. Drainage Services Department teams deployed to Kowloon flooding hotspots.",
-    citation:
-      "The Government is closely monitoring the rainstorm situation and coordinating emergency response.",
-    url: "https://www.news.gov.hk",
-    logo: "GN",
-  },
-  {
-    id: "e5",
-    source: "data.gov.hk",
-    sourceType: "Open Dataset",
-    publishedAt: "2025-07-14 06:15",
-    updatedAt: "2025-07-14 06:15",
-    summary:
-      "Rainfall dataset shows 71mm precipitation recorded in Kowloon City district over the past 3 hours.",
-    citation: "Kowloon City automatic weather station: 71.2mm / 3h.",
-    url: "https://data.gov.hk",
-    logo: "DGH",
-  },
-];
+/* ---------------- Sources ---------------- */
 
-export const claims: Claim[] = [
+export const officialSources: OfficialSource[] = [
   {
-    id: "c1",
-    text: "Heavy rain warning has been issued for Hong Kong.",
-    status: "supported",
-    confidence: 98,
-    evidenceIds: ["e1", "e5"],
-    reasoning: [
-      "Claim extracted from uploaded content mentioning 'heavy rain warning'.",
-      "Cross-referenced with HKO real-time warning feed — Amber Rainstorm Signal is currently active.",
-      "Supporting rainfall data from data.gov.hk confirms 71mm in past 3 hours.",
-      "Conclusion: claim is factually supported by two independent official sources.",
-    ],
-  },
-  {
-    id: "c2",
-    text: "All schools will suspend classes tomorrow.",
-    status: "refuted",
-    confidence: 6,
-    evidenceIds: ["e2"],
-    reasoning: [
-      "Claim extracted from uploaded content asserting universal class suspension.",
-      "Queried Education Bureau announcement feed — no suspension notice issued as of 06:00.",
-      "EDB policy requires Black Rainstorm or T8 signal for automatic suspension; neither is in force.",
-      "Conclusion: claim contradicts the current official EDB announcement.",
-    ],
-  },
-  {
-    id: "c3",
-    text: "Traffic disruption is expected in Kowloon.",
-    status: "supported",
-    confidence: 88,
-    evidenceIds: ["e3", "e4"],
-    reasoning: [
-      "Claim extracted from uploaded content mentioning Kowloon traffic disruption.",
-      "Transport Department notices confirm multiple flooding incidents on Waterloo Road, Boundary Street, Nathan Road.",
-      "Government News confirms inter-departmental emergency response is active.",
-      "Conclusion: claim is supported, with moderate confidence due to evolving situation.",
-    ],
-  },
-  {
-    id: "c4",
-    text: "MTR services will be fully suspended across Kowloon tomorrow.",
-    status: "refuted",
-    confidence: 9,
-    evidenceIds: ["e3", "e4"],
-    reasoning: [
-      "Claim extracted from uploaded content asserting a full MTR shutdown in Kowloon.",
-      "Transport Department notices report localized flooding only — no operator-wide MTR suspension announced.",
-      "Government News press release confirms emergency response is active but transit continues to operate.",
-      "Conclusion: claim contradicts current Transport Department and Government News advisories.",
-    ],
-  },
-];
-
-export const suggestions = [
-  "Continue monitoring Hong Kong Observatory rainstorm warning updates.",
-  "Check Education Bureau announcements before making travel decisions for children.",
-  "Follow Transport Department traffic notices for real-time road conditions.",
-  "Refer to news.gov.hk for consolidated government advisories.",
-];
-
-export const officialSources = [
-  {
+    key: "hko",
     name: "Hong Kong Observatory",
-    type: "Weather API",
-    logo: "HKO",
-    description: "Real-time weather warnings, rainfall data, and tropical cyclone tracking.",
+    shortName: "HKO",
+    type: "Weather warnings feed",
+    description:
+      "Rainstorm and tropical cyclone warning signals, rainfall nowcasts and severe weather advisories.",
     url: "https://www.hko.gov.hk",
     updated: "Every 10 minutes",
   },
   {
+    key: "govnews",
     name: "Government News",
-    type: "RSS Feed",
-    logo: "GN",
-    description: "Official press releases and consolidated advisories from all HKSAR departments.",
+    shortName: "GovNews",
+    type: "Press release feed",
+    description:
+      "Official press releases and consolidated advisories from all HKSAR bureaux and departments.",
     url: "https://www.news.gov.hk",
     updated: "Continuous",
   },
   {
+    key: "td",
     name: "Transport Department",
-    type: "Traffic Notices",
-    logo: "TD",
-    description: "Real-time road closures, traffic incidents, and public transport service updates.",
+    shortName: "TD",
+    type: "Traffic notices",
+    description:
+      "Road closures, incident notices and public transport service updates across Hong Kong.",
     url: "https://www.td.gov.hk",
     updated: "Every 5 minutes",
   },
   {
+    key: "edb",
     name: "Education Bureau",
-    type: "Announcements",
-    logo: "EDB",
-    description: "Class arrangements, examination notices, and school-related official announcements.",
+    shortName: "EDB",
+    type: "Announcements & RSS",
+    description:
+      "Class arrangements, examination notices and school-related official announcements.",
     url: "https://www.edb.gov.hk",
     updated: "Every 15 minutes",
   },
   {
+    key: "datagov",
     name: "data.gov.hk",
-    type: "Open Dataset",
-    logo: "DGH",
-    description: "Structured open data across weather, transport, health, environment, and more.",
+    shortName: "data.gov.hk",
+    type: "Open datasets",
+    description:
+      "Structured open datasets across weather, transport, health, environment and more.",
     url: "https://data.gov.hk",
     updated: "Varies by dataset",
   },
   {
-    name: "Drainage Services",
-    type: "Flood Alerts",
-    logo: "DSD",
-    description: "Flood-prone area monitoring, drainage system status and stormwater alerts.",
+    key: "dsd",
+    name: "Drainage Services Department",
+    shortName: "DSD",
+    type: "Flood alerts",
+    description:
+      "Flood-prone area monitoring, drainage system status and stormwater alerts.",
     url: "https://www.dsd.gov.hk",
     updated: "Every 15 minutes",
   },
 ];
 
-export const historyReports = [
+export const sourceByKey: Record<SourceKey, OfficialSource> = Object.fromEntries(
+  officialSources.map((s) => [s.key, s]),
+) as Record<SourceKey, OfficialSource>;
+
+/* ---------------- Demo input ---------------- */
+
+export const uploadedContent =
+  "The Hong Kong Observatory has issued a Black Rainstorm Warning. All schools will suspend classes tomorrow, and major roads in Kowloon are expected to close.";
+
+/* ---------------- Evidence ---------------- */
+
+export const evidence: Evidence[] = [
   {
-    id: "r1",
-    date: "2025-07-14 06:24",
-    title: "HK rainstorm & school suspension rumor",
-    claims: 4,
-    supported: 2,
-    refuted: 2,
-    confidence: 51,
+    id: "e1",
+    sourceKey: "hko",
+    evidenceType: "Government announcement",
+    publishedAt: "2026-07-14 05:40",
+    updatedAt: "2026-07-14 06:12",
+    summary:
+      "The Black Rainstorm Warning Signal is currently in force across Hong Kong Island, Kowloon and the New Territories.",
+    citation:
+      "The Black Rainstorm Warning Signal is now in force. Members of the public should stay indoors unless it is absolutely necessary to go out.",
+    url: "https://www.hko.gov.hk/en/wxinfo/currwx/rainstorm.htm",
   },
   {
-    id: "r2",
-    date: "2025-07-12 14:02",
-    title: "MTR East Rail Line service claim",
-    claims: 4,
-    supported: 3,
-    refuted: 0,
-    confidence: 92,
+    id: "e2",
+    sourceKey: "datagov",
+    evidenceType: "Official structured data",
+    publishedAt: "2026-07-14 06:15",
+    updatedAt: "2026-07-14 06:15",
+    summary:
+      "Automatic weather station dataset records 132 mm of rainfall in Kowloon City over the past 3 hours — consistent with a Black-tier rainstorm event.",
+    citation: "Kowloon City AWS · rainfall_3h = 132.4 mm · signal_class = BLACK.",
+    url: "https://data.gov.hk/en-data/dataset/hk-hko-rss-current-weather-report",
   },
   {
-    id: "r3",
-    date: "2025-07-10 09:11",
-    title: "Air quality advisory verification",
-    claims: 2,
-    supported: 2,
-    refuted: 0,
-    confidence: 96,
+    id: "e3",
+    sourceKey: "edb",
+    evidenceType: "RSS notice",
+    publishedAt: "2026-07-14 05:55",
+    updatedAt: "2026-07-14 06:20",
+    summary:
+      "EDB has issued a suspension notice for classes still in session today, but has NOT announced any advance suspension for tomorrow.",
+    citation:
+      "Classes for all day schools have been suspended for today. Arrangements for tomorrow will be announced separately based on prevailing weather signals.",
+    url: "https://www.edb.gov.hk/en/news/rss.html",
   },
   {
-    id: "r4",
-    date: "2025-07-07 18:45",
-    title: "New public housing policy rumor",
-    claims: 5,
-    supported: 2,
-    refuted: 2,
-    confidence: 47,
+    id: "e4",
+    sourceKey: "td",
+    evidenceType: "Government announcement",
+    publishedAt: "2026-07-14 06:05",
+    updatedAt: "2026-07-14 06:22",
+    summary:
+      "Localised flooding reported on Waterloo Road and Boundary Street. No full closure of any major Kowloon trunk road has been declared at this time.",
+    citation:
+      "Motorists should avoid low-lying sections in Kowloon. Traffic on Nathan Road and the Cross-Harbour Tunnel approach remains open with diversions.",
+    url: "https://www.td.gov.hk/en/special_news/spnews.htm",
   },
   {
-    id: "r5",
-    date: "2025-07-03 11:20",
-    title: "Cross-harbour tunnel toll change",
-    claims: 3,
-    supported: 3,
-    refuted: 0,
-    confidence: 95,
+    id: "e5",
+    sourceKey: "govnews",
+    evidenceType: "Supporting evidence",
+    publishedAt: "2026-07-14 06:08",
+    updatedAt: "2026-07-14 06:08",
+    summary:
+      "Inter-departmental emergency response activated. DSD and TD teams deployed to Kowloon flooding hotspots; residents advised to monitor official channels.",
+    citation:
+      "The Government is closely monitoring the rainstorm situation and coordinating the emergency response across departments.",
+    url: "https://www.news.gov.hk/eng/2026/07/20260714/20260714_060830_123.html",
   },
 ];
 
+/* ---------------- Claims ---------------- */
+
+export const claims: Claim[] = [
+  {
+    id: "c1",
+    text: "The Hong Kong Observatory has issued a Black Rainstorm Warning.",
+    status: "supported",
+    confidence: 94,
+    evidenceIds: ["e1", "e2"],
+    explanation: {
+      officialEvidence:
+        "HKO's warning feed confirms the Black Rainstorm Warning Signal is currently in force. Structured rainfall data on data.gov.hk records 132 mm in 3 hours at the Kowloon City station.",
+      sourceConsistency:
+        "Two independent official sources (HKO warning feed and data.gov.hk open dataset) agree on both the signal class and the underlying rainfall magnitude.",
+      verdictExplanation:
+        "Both the authoritative warning notice and the raw sensor data support the claim, with no contradicting source found.",
+      recommendation:
+        "Treat this claim as reliable. Continue to monitor HKO for downgrades or upgrades of the warning signal.",
+    },
+  },
+  {
+    id: "c2",
+    text: "All schools will suspend classes tomorrow.",
+    status: "refuted",
+    confidence: 12,
+    evidenceIds: ["e3", "e5"],
+    explanation: {
+      officialEvidence:
+        "The Education Bureau's RSS notice suspends classes for today only, and explicitly states arrangements for tomorrow will be announced separately based on prevailing weather signals.",
+      sourceConsistency:
+        "No official source — EDB, Government News, or otherwise — announces a blanket suspension for tomorrow. The claim is not supported anywhere in the retrieved evidence.",
+      verdictExplanation:
+        "The claim generalises today's suspension into a definitive statement about tomorrow, which the current EDB notice directly contradicts.",
+      recommendation:
+        "Do not act on this claim. Check the EDB announcement channel again the evening before, or the morning of, before making arrangements.",
+    },
+  },
+  {
+    id: "c3",
+    text: "Major roads in Kowloon are expected to close.",
+    status: "insufficient",
+    confidence: 72,
+    evidenceIds: ["e4", "e5"],
+    explanation: {
+      officialEvidence:
+        "Transport Department notices confirm localised flooding on Waterloo Road and Boundary Street, but do not declare a closure of any major Kowloon trunk road. Government News confirms an active inter-departmental response but does not name specific closures.",
+      sourceConsistency:
+        "Evidence agrees that disruption is occurring, but disagrees on scale — the claim of 'major roads closing' is stronger than any single notice supports.",
+      verdictExplanation:
+        "The situation is evolving. There is enough evidence for real disruption, but not enough to confirm the specific claim as stated.",
+      recommendation:
+        "Treat as developing. Refresh the Transport Department special-news feed before travelling, and allow additional time for diversions.",
+    },
+  },
+];
+
+/* ---------------- Report metadata ---------------- */
+
+export const currentReport: VerificationReport = {
+  id: "r-current",
+  input: uploadedContent,
+  claimsDetected: claims.length,
+  sourcesConsulted: 5,
+  evidenceCoverage: "High",
+  lastCheckedAt: "2026-07-14 06:24 HKT",
+  claims,
+};
+
+export const confidenceTooltip =
+  "Confidence reflects evidence coverage, source agreement, and source authority.";
+
+/* ---------------- Charts ---------------- */
+
 export const distributionData = [
-  { name: "Supported", value: 2, color: "var(--success)" },
-  { name: "Refuted", value: 2, color: "var(--destructive)" },
-  { name: "Insufficient", value: 0, color: "var(--warning)" },
+  { name: "Supported", value: 1, color: "var(--success)" },
+  { name: "Refuted", value: 1, color: "var(--destructive)" },
+  { name: "Need Evidence", value: 1, color: "var(--warning)" },
 ];
 
 export const sourceUsageData = [
   { source: "HKO", count: 12 },
-  { source: "EDB", count: 6 },
-  { source: "TD", count: 9 },
   { source: "GovNews", count: 8 },
+  { source: "TD", count: 9 },
+  { source: "EDB", count: 6 },
   { source: "data.gov", count: 11 },
   { source: "DSD", count: 4 },
 ];
 
-export const processTimelineData = [
-  { step: "Extract", ms: 420 },
-  { step: "Understand", ms: 980 },
-  { step: "Claims", ms: 1240 },
-  { step: "Search", ms: 3100 },
-  { step: "Verify", ms: 2450 },
-  { step: "Report", ms: 760 },
+/* ---------------- History ---------------- */
+
+export const historyReports: HistoryReport[] = [
+  {
+    id: "r1",
+    date: "2026-07-14 06:24",
+    title: "HK Black Rainstorm & school suspension rumor",
+    claims: 3,
+    supported: 1,
+    refuted: 1,
+    insufficient: 1,
+    confidence: 59,
+  },
+  {
+    id: "r2",
+    date: "2026-07-12 14:02",
+    title: "MTR East Rail Line service claim",
+    claims: 4,
+    supported: 3,
+    refuted: 0,
+    insufficient: 1,
+    confidence: 88,
+  },
+  {
+    id: "r3",
+    date: "2026-07-10 09:11",
+    title: "Air quality advisory verification",
+    claims: 2,
+    supported: 2,
+    refuted: 0,
+    insufficient: 0,
+    confidence: 96,
+  },
+  {
+    id: "r4",
+    date: "2026-07-07 18:45",
+    title: "New public housing policy rumor",
+    claims: 5,
+    supported: 2,
+    refuted: 2,
+    insufficient: 1,
+    confidence: 47,
+  },
+  {
+    id: "r5",
+    date: "2026-07-03 11:20",
+    title: "Cross-harbour tunnel toll change",
+    claims: 3,
+    supported: 3,
+    refuted: 0,
+    insufficient: 0,
+    confidence: 95,
+  },
+];
+
+/* ---------------- Processing steps (data-driven) ---------------- */
+
+export type ProcessingStepKey =
+  | "extract"
+  | "understand"
+  | "claims"
+  | "search"
+  | "verify"
+  | "report";
+
+export interface ProcessingStep {
+  key: ProcessingStepKey;
+  label: string;
+  detail: string;
+}
+
+export const processingSteps: ProcessingStep[] = [
+  { key: "extract", label: "Extracting information", detail: "Parsing text and normalising language." },
+  { key: "understand", label: "Understanding content", detail: "Identifying topics, entities and context." },
+  { key: "claims", label: "Extracting factual claims", detail: "Splitting content into verifiable statements." },
+  { key: "search", label: "Searching official evidence", detail: "Querying HKO, EDB, TD, GovNews and data.gov.hk." },
+  { key: "verify", label: "Cross-checking sources", detail: "Comparing claims against retrieved evidence." },
+  { key: "report", label: "Generating explanation", detail: "Assembling the evidence-based report." },
 ];
