@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   FileText,
@@ -7,7 +7,8 @@ import {
   FileType,
   UploadCloud,
   Sparkles,
-  
+  X,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,10 +22,15 @@ export const Route = createFileRoute("/_app/verify")({
       { title: "Verify — VeriHK" },
       {
         name: "description",
-        content: "Upload text, an image, or a PDF and let VeriHK verify it against official Hong Kong data.",
+        content:
+          "Submit text, an image, or a PDF and verify it against timely official Hong Kong sources.",
       },
       { property: "og:title", content: "Verify — VeriHK" },
-      { property: "og:description", content: "Explainable, source-cited verification for Hong Kong public information." },
+      {
+        property: "og:description",
+        content:
+          "Explainable, source-cited verification grounded in official Hong Kong data.",
+      },
     ],
   }),
   component: VerifyPage,
@@ -33,7 +39,6 @@ export const Route = createFileRoute("/_app/verify")({
 function VerifyPage() {
   const navigate = useNavigate();
   const [text, setText] = useState(uploadedContent);
-
   const analyze = () => navigate({ to: "/processing" });
 
   return (
@@ -46,8 +51,8 @@ function VerifyPage() {
           What would you like to verify?
         </h1>
         <p className="text-muted-foreground">
-          Paste text, drop a screenshot, or upload a PDF. VeriHK will extract every factual claim
-          and check it against official sources.
+          Paste text, drop a screenshot, or upload a PDF. VeriHK extracts every factual claim and
+          cross-checks it against timely official Hong Kong sources.
         </p>
       </div>
 
@@ -83,20 +88,22 @@ function VerifyPage() {
             </TabsContent>
 
             <TabsContent value="image" className="mt-6">
-              <DropZone
+              <FileDropZone
+                accept="image/png,image/jpeg,image/webp"
                 icon={<ImageIcon className="h-6 w-6" />}
-                title="Drag & drop an image"
-                hint="PNG, JPG or WEBP · up to 10MB"
-                cta="Upload Image"
+                title="Drop an image or click to browse"
+                hint="PNG, JPG or WEBP · up to 10 MB"
+                cta="Choose Image"
               />
             </TabsContent>
 
             <TabsContent value="pdf" className="mt-6">
-              <DropZone
+              <FileDropZone
+                accept="application/pdf"
                 icon={<FileType className="h-6 w-6" />}
-                title="Drag & drop a PDF"
-                hint="PDF · up to 25MB"
-                cta="Upload PDF"
+                title="Drop a PDF or click to browse"
+                hint="PDF · up to 25 MB"
+                cta="Choose PDF"
               />
             </TabsContent>
           </Tabs>
@@ -134,19 +141,74 @@ function VerifyPage() {
   );
 }
 
-function DropZone({
+function FileDropZone({
+  accept,
   icon,
   title,
   hint,
   cta,
 }: {
+  accept: string;
   icon: React.ReactNode;
   title: string;
   hint: string;
   cta: string;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  const pick = () => inputRef.current?.click();
+
+  const onFiles = (files: FileList | null) => {
+    if (files && files[0]) setFile(files[0]);
+  };
+
+  if (file) {
+    const kb = (file.size / 1024).toFixed(1);
+    const size = file.size > 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${kb} KB`;
+    return (
+      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-success/30 bg-success/5 p-5">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-success/15 text-success">
+          <CheckCircle2 className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-semibold">{file.name}</div>
+          <div className="text-xs text-muted-foreground">
+            Selected · {size} · ready to analyze
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1 rounded-full text-muted-foreground"
+          onClick={() => setFile(null)}
+          type="button"
+        >
+          <X className="h-4 w-4" /> Remove
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <label className="group flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border/70 bg-background/40 p-12 text-center transition-colors hover:border-primary/50 hover:bg-primary/5">
+    <label
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        onFiles(e.dataTransfer.files);
+      }}
+      className={`group flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-12 text-center transition-colors ${
+        dragOver
+          ? "border-primary/60 bg-primary/5"
+          : "border-border/70 bg-background/40 hover:border-primary/50 hover:bg-primary/5"
+      }`}
+    >
       <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary transition-transform group-hover:scale-105">
         <UploadCloud className="h-6 w-6" />
       </div>
@@ -154,11 +216,17 @@ function DropZone({
         <div className="text-base font-semibold">{title}</div>
         <div className="text-xs text-muted-foreground">{hint}</div>
       </div>
-      <Button variant="secondary" className="rounded-full" type="button">
+      <Button variant="secondary" className="rounded-full" type="button" onClick={pick}>
         {icon}
         <span className="ml-2">{cta}</span>
       </Button>
-      <input type="file" className="hidden" />
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(e) => onFiles(e.target.files)}
+      />
     </label>
   );
 }

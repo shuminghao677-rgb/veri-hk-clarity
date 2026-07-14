@@ -1,37 +1,28 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  ScanText,
-  Brain,
-  ListChecks,
-  Search,
-  ShieldCheck,
-  FileSignature,
-  Check,
-  Loader2,
-} from "lucide-react";
+import { Check, Loader2, FastForward } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { processingSteps } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/_app/processing")({
   head: () => ({
     meta: [
       { title: "Analyzing — VeriHK" },
-      { name: "description", content: "VeriHK is extracting claims and searching official Hong Kong sources." },
+      {
+        name: "description",
+        content: "VeriHK is extracting claims and searching official Hong Kong sources.",
+      },
     ],
   }),
   component: ProcessingPage,
 });
 
-const steps = [
-  { icon: ScanText, label: "Extracting information" },
-  { icon: Brain, label: "Understanding content" },
-  { icon: ListChecks, label: "Extracting factual claims" },
-  { icon: Search, label: "Searching official evidence" },
-  { icon: ShieldCheck, label: "Verifying claims" },
-  { icon: FileSignature, label: "Generating explainable report" },
-];
+// Total wall time ≈ 6 steps × 950ms = 5.7s
+const STEP_MS = 950;
+const TICK_MS = 60;
 
 function ProcessingPage() {
   const navigate = useNavigate();
@@ -39,28 +30,30 @@ function ProcessingPage() {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
-    const stepMs = 1600;
-    const interval = setInterval(() => {
+    const totalMs = processingSteps.length * STEP_MS;
+
+    const stepInt = setInterval(() => {
       setActive((s) => {
-        if (s + 1 >= steps.length) {
-          clearInterval(interval);
-          setProgress(100);
-          setTimeout(() => navigate({ to: "/results" }), 700);
-          return s + 1;
+        const next = s + 1;
+        if (next >= processingSteps.length) {
+          clearInterval(stepInt);
+          setTimeout(() => navigate({ to: "/results" }), 600);
         }
-        return s + 1;
+        return next;
       });
-    }, stepMs);
+    }, STEP_MS);
 
     const progInt = setInterval(() => {
-      setProgress((p) => Math.min(p + 100 / ((steps.length * stepMs) / 100), 100));
-    }, 100);
+      setProgress((p) => Math.min(p + (100 * TICK_MS) / totalMs, 100));
+    }, TICK_MS);
 
     return () => {
-      clearInterval(interval);
+      clearInterval(stepInt);
       clearInterval(progInt);
     };
   }, [navigate]);
+
+  const skip = () => navigate({ to: "/results" });
 
   return (
     <div className="grid min-h-[calc(100vh-4rem)] place-items-center px-4 py-10">
@@ -73,26 +66,28 @@ function ProcessingPage() {
             Analyzing your content
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Estimated 8–15 seconds · cross-checking official Hong Kong sources
+            Cross-checking against timely official Hong Kong sources.
           </p>
         </div>
 
         <Progress value={progress} className="h-2 rounded-full" />
         <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
           <span>{Math.round(progress)}%</span>
-          <span>{Math.min(active + 1, steps.length)} of {steps.length}</span>
+          <span>
+            {Math.min(active + 1, processingSteps.length)} of {processingSteps.length}
+          </span>
         </div>
 
         <ol className="mt-8 space-y-3">
-          {steps.map((s, i) => {
+          {processingSteps.map((s, i) => {
             const done = i < active;
             const current = i === active;
             return (
               <motion.li
-                key={s.label}
+                key={s.key}
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
+                transition={{ delay: i * 0.04 }}
                 className={`flex items-center gap-4 rounded-2xl border p-4 transition-colors ${
                   current
                     ? "border-primary/40 bg-primary/5"
@@ -115,19 +110,33 @@ function ProcessingPage() {
                   ) : current ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <s.icon className="h-4 w-4" />
+                    <span className="text-[11px] font-semibold">{i + 1}</span>
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{s.label}</div>
-                  <div className="text-[11px] text-muted-foreground">
-                    {done ? "Completed" : current ? "In progress..." : "Queued"}
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    {done ? "Completed" : current ? s.detail : "Queued"}
                   </div>
                 </div>
               </motion.li>
             );
           })}
         </ol>
+
+        {import.meta.env.DEV && (
+          <div className="mt-6 flex justify-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={skip}
+              className="gap-2 rounded-full text-xs text-muted-foreground hover:text-foreground"
+            >
+              <FastForward className="h-3.5 w-3.5" />
+              Skip to demo result
+            </Button>
+          </div>
+        )}
       </Card>
     </div>
   );
