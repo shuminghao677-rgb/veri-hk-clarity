@@ -64,7 +64,7 @@ function Dashboard() {
         <Kpi icon={ScanSearch} label="Verifications" value="24" trend="+18%" />
         <Kpi icon={ShieldCheck} label="Claims supported" value="46" trend="+9%" />
         <Kpi icon={XCircle} label="Claims refuted" value="8" trend="-3%" />
-        <Kpi icon={Gauge} label="Avg. confidence" value="94%" trend="+1.2%" />
+        <Kpi icon={Gauge} label="Avg. truth score" value="79%" trend="+1.2%" />
       </div>
 
       {/* Charts */}
