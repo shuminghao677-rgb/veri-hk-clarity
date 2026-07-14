@@ -8,7 +8,7 @@ import {
   Gauge,
   ExternalLink,
   Sparkles,
-  ArrowRight,
+  
   FileText,
   Quote,
   Lightbulb,
@@ -101,9 +101,7 @@ function Results() {
             <Link to="/history">View History</Link>
           </Button>
           <Button asChild className="rounded-full shadow-elegant">
-            <Link to="/verify">
-              New verification <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
+            <Link to="/verify">New verification</Link>
           </Button>
         </div>
       </div>

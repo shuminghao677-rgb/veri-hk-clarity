@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ShieldCheck, XCircle, History as HistoryIcon, ArrowRight } from "lucide-react";
+import { ShieldCheck, XCircle, History as HistoryIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,9 +32,7 @@ function HistoryPage() {
           </p>
         </div>
         <Button asChild className="rounded-full shadow-elegant">
-          <Link to="/verify">
-            New verification <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
+          <Link to="/verify">New verification</Link>
         </Button>
       </div>
 
