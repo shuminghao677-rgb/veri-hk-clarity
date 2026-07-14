@@ -4,7 +4,7 @@ import {
   ShieldCheck,
   XCircle,
   Gauge,
-  ArrowRight,
+  
   Sparkles,
 } from "lucide-react";
 import {
