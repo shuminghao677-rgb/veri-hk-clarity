@@ -130,6 +130,19 @@ export const claims: Claim[] = [
       "Conclusion: claim is supported, with moderate confidence due to evolving situation.",
     ],
   },
+  {
+    id: "c4",
+    text: "MTR services will be fully suspended across Kowloon tomorrow.",
+    status: "refuted",
+    confidence: 9,
+    evidenceIds: ["e3", "e4"],
+    reasoning: [
+      "Claim extracted from uploaded content asserting a full MTR shutdown in Kowloon.",
+      "Transport Department notices report localized flooding only — no operator-wide MTR suspension announced.",
+      "Government News press release confirms emergency response is active but transit continues to operate.",
+      "Conclusion: claim contradicts current Transport Department and Government News advisories.",
+    ],
+  },
 ];
 
 export const suggestions = [
