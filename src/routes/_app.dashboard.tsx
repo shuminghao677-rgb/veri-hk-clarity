@@ -55,9 +55,7 @@ function Dashboard() {
           </p>
         </div>
         <Button asChild className="rounded-full shadow-elegant">
-          <Link to="/verify">
-            New verification <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
+          <Link to="/verify">New verification</Link>
         </Button>
       </div>
 
