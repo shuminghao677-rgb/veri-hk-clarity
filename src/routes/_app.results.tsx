@@ -93,7 +93,7 @@ function Results() {
             Verification Report
           </h1>
           <p className="mt-1 text-muted-foreground">
-            3 factual claims extracted · cross-checked against 5 official sources.
+            4 factual claims extracted · cross-checked against 5 official sources.
           </p>
         </div>
         <div className="flex gap-2">
