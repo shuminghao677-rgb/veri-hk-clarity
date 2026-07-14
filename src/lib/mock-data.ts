@@ -130,6 +130,19 @@ export const claims: Claim[] = [
       "Conclusion: claim is supported, with moderate confidence due to evolving situation.",
     ],
   },
+  {
+    id: "c4",
+    text: "MTR services will be fully suspended across Kowloon tomorrow.",
+    status: "refuted",
+    confidence: 9,
+    evidenceIds: ["e3", "e4"],
+    reasoning: [
+      "Claim extracted from uploaded content asserting a full MTR shutdown in Kowloon.",
+      "Transport Department notices report localized flooding only — no operator-wide MTR suspension announced.",
+      "Government News press release confirms emergency response is active but transit continues to operate.",
+      "Conclusion: claim contradicts current Transport Department and Government News advisories.",
+    ],
+  },
 ];
 
 export const suggestions = [
@@ -195,10 +208,10 @@ export const historyReports = [
     id: "r1",
     date: "2025-07-14 06:24",
     title: "HK rainstorm & school suspension rumor",
-    claims: 3,
+    claims: 4,
     supported: 2,
-    refuted: 1,
-    confidence: 64,
+    refuted: 2,
+    confidence: 51,
   },
   {
     id: "r2",
@@ -240,7 +253,7 @@ export const historyReports = [
 
 export const distributionData = [
   { name: "Supported", value: 2, color: "var(--success)" },
-  { name: "Refuted", value: 1, color: "var(--destructive)" },
+  { name: "Refuted", value: 2, color: "var(--destructive)" },
   { name: "Insufficient", value: 0, color: "var(--warning)" },
 ];
 

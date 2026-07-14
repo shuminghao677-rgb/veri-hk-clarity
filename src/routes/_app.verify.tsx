@@ -7,7 +7,7 @@ import {
   FileType,
   UploadCloud,
   Sparkles,
-  ArrowRight,
+  
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -110,7 +110,7 @@ function VerifyPage() {
               onClick={analyze}
               className="rounded-full px-8 shadow-elegant sm:min-w-52"
             >
-              Analyze <ArrowRight className="ml-2 h-4 w-4" />
+              Analyze
             </Button>
           </div>
         </Card>

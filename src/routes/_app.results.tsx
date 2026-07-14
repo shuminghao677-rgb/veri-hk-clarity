@@ -93,7 +93,7 @@ function Results() {
             Verification Report
           </h1>
           <p className="mt-1 text-muted-foreground">
-            3 factual claims extracted · cross-checked against 5 official sources.
+            4 factual claims extracted · cross-checked against 5 official sources.
           </p>
         </div>
         <div className="flex gap-2">
@@ -112,7 +112,7 @@ function Results() {
         <StatCard icon={ShieldCheck} label="Supported" value={String(supported)} tone="success" />
         <StatCard icon={XCircle} label="Refuted" value={String(refuted)} tone="destructive" />
         <StatCard icon={HelpCircle} label="Need Evidence" value={String(insufficient)} tone="warning" />
-        <StatCard icon={Gauge} label="Overall Confidence" value="96%" tone="primary" />
+        <StatCard icon={Gauge} label="Overall Confidence" value="51%" tone="primary" />
       </div>
 
       {/* Uploaded content */}

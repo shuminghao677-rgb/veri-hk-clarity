@@ -4,7 +4,7 @@ import {
   ShieldCheck,
   XCircle,
   Gauge,
-  ArrowRight,
+  
   Sparkles,
 } from "lucide-react";
 import {
@@ -61,10 +61,10 @@ function Dashboard() {
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Kpi icon={ScanSearch} label="Verifications" value="24" trend="+18%" />
-        <Kpi icon={ShieldCheck} label="Claims supported" value="46" trend="+9%" />
-        <Kpi icon={XCircle} label="Claims refuted" value="8" trend="-3%" />
-        <Kpi icon={Gauge} label="Avg. truth score" value="79%" trend="+1.2%" />
+        <Kpi icon={ScanSearch} label="Verifications" value="5" trend="+18%" />
+        <Kpi icon={ShieldCheck} label="Claims supported" value="12" trend="+9%" />
+        <Kpi icon={XCircle} label="Claims refuted" value="4" trend="-3%" />
+        <Kpi icon={Gauge} label="Avg. truth score" value="76%" trend="+1.2%" />
       </div>
 
       {/* Charts */}
@@ -124,7 +124,7 @@ function Dashboard() {
           <h2 className="text-xl font-semibold tracking-tight">Recent activity</h2>
           <Button asChild variant="ghost" className="text-primary">
             <Link to="/history">
-              View all <ArrowRight className="ml-1 h-4 w-4" />
+              View all
             </Link>
           </Button>
         </div>
