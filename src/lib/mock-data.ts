@@ -108,7 +108,7 @@ export const claims: Claim[] = [
     id: "c2",
     text: "All schools will suspend classes tomorrow.",
     status: "refuted",
-    confidence: 95,
+    confidence: 6,
     evidenceIds: ["e2"],
     reasoning: [
       "Claim extracted from uploaded content asserting universal class suspension.",
@@ -198,7 +198,7 @@ export const historyReports = [
     claims: 3,
     supported: 2,
     refuted: 1,
-    confidence: 96,
+    confidence: 64,
   },
   {
     id: "r2",
@@ -216,7 +216,7 @@ export const historyReports = [
     claims: 2,
     supported: 2,
     refuted: 0,
-    confidence: 99,
+    confidence: 96,
   },
   {
     id: "r4",
@@ -225,7 +225,7 @@ export const historyReports = [
     claims: 5,
     supported: 2,
     refuted: 2,
-    confidence: 81,
+    confidence: 47,
   },
   {
     id: "r5",
@@ -234,7 +234,7 @@ export const historyReports = [
     claims: 3,
     supported: 3,
     refuted: 0,
-    confidence: 97,
+    confidence: 95,
   },
 ];
 
