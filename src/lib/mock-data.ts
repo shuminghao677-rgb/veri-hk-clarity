@@ -208,10 +208,10 @@ export const historyReports = [
     id: "r1",
     date: "2025-07-14 06:24",
     title: "HK rainstorm & school suspension rumor",
-    claims: 3,
+    claims: 4,
     supported: 2,
-    refuted: 1,
-    confidence: 64,
+    refuted: 2,
+    confidence: 51,
   },
   {
     id: "r2",
