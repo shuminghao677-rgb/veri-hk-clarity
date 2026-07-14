@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -123,20 +123,6 @@ function VerifyPage() {
         </Card>
       </motion.div>
 
-      <div className="mt-8 grid gap-3 sm:grid-cols-3">
-        {[
-          { title: "Rainstorm warning rumor", desc: "Class suspension claim in circulation." },
-          { title: "MTR service update", desc: "Verify against Transport Dept feed." },
-          { title: "Housing policy claim", desc: "Cross-check government press releases." },
-        ].map((s) => (
-          <Card key={s.title} className="rounded-2xl border-dashed p-4 hover:bg-muted/40">
-            <Link to="/verify" className="block">
-              <div className="text-sm font-medium">{s.title}</div>
-              <div className="text-xs text-muted-foreground">{s.desc}</div>
-            </Link>
-          </Card>
-        ))}
-      </div>
     </div>
   );
 }
