@@ -124,7 +124,7 @@ function Dashboard() {
           <h2 className="text-xl font-semibold tracking-tight">Recent activity</h2>
           <Button asChild variant="ghost" className="text-primary">
             <Link to="/history">
-              View all <ArrowRight className="ml-1 h-4 w-4" />
+              View all
             </Link>
           </Button>
         </div>
