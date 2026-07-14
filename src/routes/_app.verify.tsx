@@ -7,7 +7,7 @@ import {
   FileType,
   UploadCloud,
   Sparkles,
-  ArrowRight,
+  
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
