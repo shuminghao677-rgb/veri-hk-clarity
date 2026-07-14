@@ -253,7 +253,7 @@ export const historyReports = [
 
 export const distributionData = [
   { name: "Supported", value: 2, color: "var(--success)" },
-  { name: "Refuted", value: 1, color: "var(--destructive)" },
+  { name: "Refuted", value: 2, color: "var(--destructive)" },
   { name: "Insufficient", value: 0, color: "var(--warning)" },
 ];
 
