@@ -112,7 +112,7 @@ function Results() {
         <StatCard icon={ShieldCheck} label="Supported" value={String(supported)} tone="success" />
         <StatCard icon={XCircle} label="Refuted" value={String(refuted)} tone="destructive" />
         <StatCard icon={HelpCircle} label="Need Evidence" value={String(insufficient)} tone="warning" />
-        <StatCard icon={Gauge} label="Overall Confidence" value="96%" tone="primary" />
+        <StatCard icon={Gauge} label="Overall Confidence" value="51%" tone="primary" />
       </div>
 
       {/* Uploaded content */}
