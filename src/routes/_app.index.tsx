@@ -77,7 +77,7 @@ function Landing() {
           >
             <Button asChild size="lg" className="rounded-full px-6 shadow-elegant">
               <Link to="/verify">
-                Start Verification <ArrowRight className="ml-1.5 h-4 w-4" />
+                Start Verification
               </Link>
             </Button>
             <Button
