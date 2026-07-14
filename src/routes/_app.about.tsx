@@ -99,7 +99,7 @@ function AboutPage() {
         <ol className="relative space-y-5 border-l border-border/70 pl-6">
           {[
             { q: "Q3 2026", t: "Bilingual reports", d: "Full 繁體中文 and English side-by-side verification reports." },
-            { q: "Q4 2026", t: "Realtime alerts", d: "Subscribe to topics and get notified when official sources contradict trending claims." },
+            { q: "Q4 2026", t: "Timely topic alerts", d: "Subscribe to topics and get notified when official sources contradict trending claims." },
             { q: "Q1 2027", t: "Public API", d: "Programmatic access for newsrooms, government units and research teams." },
           ].map((s, i) => (
             <li key={i} className="relative">
