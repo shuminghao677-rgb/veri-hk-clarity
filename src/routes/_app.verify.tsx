@@ -9,12 +9,14 @@ import {
   Sparkles,
   X,
   CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { uploadedContent } from "@/lib/mock-data";
+import { MAX_ANALYSIS_INPUT_CHARS, PENDING_INPUT_KEY } from "@/lib/report-contract";
 
 export const Route = createFileRoute("/_app/verify")({
   head: () => ({
@@ -28,8 +30,7 @@ export const Route = createFileRoute("/_app/verify")({
       { property: "og:title", content: "Verify — VeriHK" },
       {
         property: "og:description",
-        content:
-          "Explainable, source-cited verification grounded in official Hong Kong data.",
+        content: "Explainable, source-cited verification grounded in official Hong Kong data.",
       },
     ],
   }),
@@ -39,7 +40,27 @@ export const Route = createFileRoute("/_app/verify")({
 function VerifyPage() {
   const navigate = useNavigate();
   const [text, setText] = useState(uploadedContent);
-  const analyze = () => navigate({ to: "/processing" });
+  const [error, setError] = useState("");
+
+  const analyze = () => {
+    const trimmed = text.trim();
+
+    if (!trimmed) {
+      setError("Please enter some text to analyze.");
+      return;
+    }
+
+    if (trimmed.length > MAX_ANALYSIS_INPUT_CHARS) {
+      setError(
+        `Please keep the text under ${MAX_ANALYSIS_INPUT_CHARS.toLocaleString()} characters for this first version.`,
+      );
+      return;
+    }
+
+    window.sessionStorage.setItem(PENDING_INPUT_KEY, trimmed);
+    setError("");
+    navigate({ to: "/processing" });
+  };
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10 md:px-8 md:py-14">
@@ -83,7 +104,8 @@ function VerifyPage() {
                 className="min-h-52 resize-none rounded-2xl border-border/70 bg-background/60 p-5 text-base leading-relaxed"
               />
               <p className="mt-2 text-xs text-muted-foreground">
-                {text.length} characters · English & 繁體中文 supported
+                {text.length} / {MAX_ANALYSIS_INPUT_CHARS.toLocaleString()} characters · English &
+                繁體中文 supported
               </p>
             </TabsContent>
 
@@ -109,9 +131,17 @@ function VerifyPage() {
           </Tabs>
 
           <div className="mt-8 flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted-foreground">
-              By analyzing, you agree that content will be checked against public official sources.
-            </p>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Phase 1 generates preliminary AI analysis only. Official source checking comes next.
+              </p>
+              {error && (
+                <p className="inline-flex items-center gap-1.5 text-xs font-medium text-destructive">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {error}
+                </p>
+              )}
+            </div>
             <Button
               size="lg"
               onClick={analyze}
@@ -122,7 +152,6 @@ function VerifyPage() {
           </div>
         </Card>
       </motion.div>
-
     </div>
   );
 }
@@ -152,7 +181,8 @@ function FileDropZone({
 
   if (file) {
     const kb = (file.size / 1024).toFixed(1);
-    const size = file.size > 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${kb} KB`;
+    const size =
+      file.size > 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${kb} KB`;
     return (
       <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-success/30 bg-success/5 p-5">
         <div className="grid h-12 w-12 place-items-center rounded-2xl bg-success/15 text-success">
@@ -160,9 +190,7 @@ function FileDropZone({
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{file.name}</div>
-          <div className="text-xs text-muted-foreground">
-            Selected · {size} · ready to analyze
-          </div>
+          <div className="text-xs text-muted-foreground">Selected · {size} · ready to analyze</div>
         </div>
         <Button
           variant="ghost"

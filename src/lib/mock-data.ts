@@ -1,10 +1,7 @@
 export type ClaimStatus = "supported" | "refuted" | "insufficient";
 
 export type EvidenceType =
-  | "Official structured data"
-  | "Government announcement"
-  | "RSS notice"
-  | "Supporting evidence";
+  "Official structured data" | "Government announcement" | "RSS notice" | "Supporting evidence";
 
 export type SourceKey = "hko" | "td" | "edb" | "govnews" | "datagov" | "dsd";
 
@@ -24,6 +21,7 @@ export interface Evidence {
   evidenceType: EvidenceType;
   publishedAt: string;
   updatedAt: string;
+  retrievedAt?: string;
   summary: string;
   citation: string;
   url: string;
@@ -124,8 +122,7 @@ export const officialSources: OfficialSource[] = [
     name: "Drainage Services Department",
     shortName: "DSD",
     type: "Flood alerts",
-    description:
-      "Flood-prone area monitoring, drainage system status and stormwater alerts.",
+    description: "Flood-prone area monitoring, drainage system status and stormwater alerts.",
     url: "https://www.dsd.gov.hk",
     updated: "Every 15 minutes",
   },
@@ -350,12 +347,7 @@ export const historyReports: HistoryReport[] = [
 /* ---------------- Processing steps (data-driven) ---------------- */
 
 export type ProcessingStepKey =
-  | "extract"
-  | "understand"
-  | "claims"
-  | "search"
-  | "verify"
-  | "report";
+  "extract" | "understand" | "claims" | "search" | "verify" | "report";
 
 export interface ProcessingStep {
   key: ProcessingStepKey;
@@ -364,10 +356,34 @@ export interface ProcessingStep {
 }
 
 export const processingSteps: ProcessingStep[] = [
-  { key: "extract", label: "Extracting information", detail: "Parsing text and normalising language." },
-  { key: "understand", label: "Understanding content", detail: "Identifying topics, entities and context." },
-  { key: "claims", label: "Extracting factual claims", detail: "Splitting content into verifiable statements." },
-  { key: "search", label: "Searching official evidence", detail: "Querying HKO, EDB, TD, GovNews and data.gov.hk." },
-  { key: "verify", label: "Cross-checking sources", detail: "Comparing claims against retrieved evidence." },
-  { key: "report", label: "Generating explanation", detail: "Assembling the evidence-based report." },
+  {
+    key: "extract",
+    label: "Extracting information",
+    detail: "Parsing text and normalising language.",
+  },
+  {
+    key: "understand",
+    label: "Understanding content",
+    detail: "Identifying topics, entities and context.",
+  },
+  {
+    key: "claims",
+    label: "Extracting factual claims",
+    detail: "Splitting content into verifiable statements.",
+  },
+  {
+    key: "search",
+    label: "Searching official evidence",
+    detail: "Querying HKO, EDB, TD, GovNews and data.gov.hk.",
+  },
+  {
+    key: "verify",
+    label: "Cross-checking sources",
+    detail: "Comparing claims against retrieved evidence.",
+  },
+  {
+    key: "report",
+    label: "Generating explanation",
+    detail: "Assembling the evidence-based report.",
+  },
 ];

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ShieldCheck,
@@ -35,25 +36,35 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
-  claims,
-  evidence,
-  currentReport,
+  claims as mockClaims,
+  evidence as mockEvidence,
+  currentReport as mockCurrentReport,
   confidenceTooltip,
-  distributionData,
-  sourceUsageData,
+  distributionData as mockDistributionData,
+  sourceUsageData as mockSourceUsageData,
   sourceByKey,
   type Claim,
   type Evidence,
   type EvidenceType,
 } from "@/lib/mock-data";
 import { SourceIcon } from "@/components/verihk/SourceIcon";
+import {
+  LATEST_REPORT_KEY,
+  isPhaseOneReport,
+  type PhaseOneClaim,
+  type PhaseOneEvidence,
+  type PhaseOneReport,
+} from "@/lib/report-contract";
+import { formatHongKongTime } from "@/lib/live-sources";
+import {
+  getEvidenceItemText,
+  getHeaderReportLabels,
+  getOfficialUpdateLabel,
+  getRetrievedByVeriHkLabel,
+  getSourceConsistencyText,
+} from "@/lib/report-display";
 
 export const Route = createFileRoute("/_app/results")({
   head: () => ({
@@ -98,10 +109,57 @@ const evidenceTypeStyles: Record<EvidenceType, string> = {
 };
 
 function Results() {
+  const [generatedReport, setGeneratedReport] = useState<PhaseOneReport | null>(null);
+
+  useEffect(() => {
+    const storedReport = window.sessionStorage.getItem(LATEST_REPORT_KEY);
+    if (!storedReport) return;
+
+    try {
+      const parsed = JSON.parse(storedReport) as unknown;
+      if (isPhaseOneReport(parsed)) {
+        setGeneratedReport(parsed);
+      }
+    } catch {
+      setGeneratedReport(null);
+    }
+  }, []);
+
+  const isGenerated = Boolean(generatedReport);
+  const claims = useMemo(
+    () => (generatedReport ? generatedReport.claims.map(toMockClaim) : mockClaims),
+    [generatedReport],
+  );
+  const evidence = useMemo(
+    () => (generatedReport ? toMockEvidence(generatedReport.claims) : mockEvidence),
+    [generatedReport],
+  );
+  const sourcesConsulted = generatedReport
+    ? new Set(generatedReport.source_freshness?.map((source) => source.source_key)).size
+    : mockCurrentReport.sourcesConsulted;
+  const reportMeta = generatedReport
+    ? {
+        input: generatedReport.input_content,
+        claimsDetected: generatedReport.claims.length,
+        sourcesConsulted,
+        evidenceCoverage: toCoverageLabel(generatedReport.evidence_coverage),
+        lastCheckedAt: formatHongKongTime(generatedReport.checked_at),
+      }
+    : mockCurrentReport;
+  const [reportLabel] = getHeaderReportLabels(generatedReport);
   const evidenceById = Object.fromEntries(evidence.map((e) => [e.id, e]));
   const supported = claims.filter((c) => c.status === "supported").length;
   const refuted = claims.filter((c) => c.status === "refuted").length;
   const insufficient = claims.filter((c) => c.status === "insufficient").length;
+  const distributionData = isGenerated
+    ? [
+        { name: "Supported", value: supported, color: "var(--success)" },
+        { name: "Refuted", value: refuted, color: "var(--destructive)" },
+        { name: "Need Evidence", value: insufficient, color: "var(--warning)" },
+      ]
+    : mockDistributionData;
+  const sourceUsageData = isGenerated ? buildGeneratedSourceUsage(evidence) : mockSourceUsageData;
+  const retrievalCounts = generatedReport?.retrieval_counts;
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -110,21 +168,21 @@ function Results() {
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border bg-background/60 px-3 py-1 text-[11px] font-medium text-muted-foreground">
-              <Sparkles className="h-3 w-3 text-primary" /> Verification report
+              <Sparkles className="h-3 w-3 text-primary" /> {reportLabel}
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
               Evidence-based Explanation
             </h1>
 
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <MetaChip icon={ListChecks}>{currentReport.claimsDetected} claims detected</MetaChip>
+              <MetaChip icon={ListChecks}>{reportMeta.claimsDetected} claims detected</MetaChip>
               <MetaChip icon={Landmark}>
-                {currentReport.sourcesConsulted} official sources consulted
+                {reportMeta.sourcesConsulted} official sources consulted
               </MetaChip>
               <MetaChip icon={ShieldCheck}>
-                Evidence coverage: {currentReport.evidenceCoverage}
+                Evidence coverage: {reportMeta.evidenceCoverage}
               </MetaChip>
-              <MetaChip icon={Clock}>Last checked {currentReport.lastCheckedAt}</MetaChip>
+              <MetaChip icon={Clock}>Last checked {reportMeta.lastCheckedAt}</MetaChip>
             </div>
           </div>
           <div className="flex gap-2">
@@ -139,10 +197,20 @@ function Results() {
 
         {/* Stat cards */}
         <div className="grid gap-4 md:grid-cols-4">
-          <StatCard icon={ListChecks} label="Total claims" value={String(claims.length)} tone="primary" />
+          <StatCard
+            icon={ListChecks}
+            label="Total claims"
+            value={String(claims.length)}
+            tone="primary"
+          />
           <StatCard icon={ShieldCheck} label="Supported" value={String(supported)} tone="success" />
           <StatCard icon={XCircle} label="Refuted" value={String(refuted)} tone="destructive" />
-          <StatCard icon={HelpCircle} label="Need evidence" value={String(insufficient)} tone="warning" />
+          <StatCard
+            icon={HelpCircle}
+            label="Need evidence"
+            value={String(insufficient)}
+            tone="warning"
+          />
         </div>
 
         {/* Uploaded content */}
@@ -150,7 +218,49 @@ function Results() {
           <div className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
             <FileText className="h-4 w-4" /> SUBMITTED CONTENT
           </div>
-          <p className="text-pretty text-base leading-relaxed">{currentReport.input}</p>
+          <p className="text-pretty text-base leading-relaxed">{reportMeta.input}</p>
+          {isGenerated && (
+            <p className="mt-4 rounded-2xl border border-warning/30 bg-warning/10 p-3 text-xs leading-relaxed text-warning-foreground">
+              This prototype fetches selected live official sources at request time. It does not
+              claim full historical coverage.
+            </p>
+          )}
+          {isGenerated && retrievalCounts && (
+            <div className="mt-4 grid gap-2 text-xs md:grid-cols-3">
+              <div className="rounded-2xl border bg-muted/30 p-3">
+                <div className="font-medium">{retrievalCounts.official_sources_queried}</div>
+                <div className="mt-1 text-muted-foreground">Official endpoints queried</div>
+              </div>
+              <div className="rounded-2xl border bg-muted/30 p-3">
+                <div className="font-medium">{retrievalCounts.feed_items_fetched}</div>
+                <div className="mt-1 text-muted-foreground">Official records retrieved</div>
+              </div>
+              <div className="rounded-2xl border bg-muted/30 p-3">
+                <div className="font-medium">{retrievalCounts.relevant_evidence_attached}</div>
+                <div className="mt-1 text-muted-foreground">Relevant evidence attached</div>
+              </div>
+            </div>
+          )}
+          {generatedReport?.source_freshness && (
+            <div className="mt-4 grid gap-2 md:grid-cols-2">
+              {generatedReport.source_freshness.map((source) => (
+                <div
+                  key={`${source.source_key}-${source.retrieved_at}`}
+                  className="rounded-2xl border bg-muted/30 p-3 text-xs"
+                >
+                  <div className="font-medium">{source.source_name}</div>
+                  <div className="mt-1 text-muted-foreground">Freshness: {source.freshness}</div>
+                  <div className="mt-1 text-muted-foreground">
+                    Official update:{" "}
+                    {source.updated_at ? formatHongKongTime(source.updated_at) : "Not stated"}
+                  </div>
+                  <div className="mt-1 text-muted-foreground">
+                    Retrieved by VeriHK: {formatHongKongTime(source.retrieved_at)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         {/* Two-column: claims & charts */}
@@ -186,7 +296,7 @@ function Results() {
                     <div className="mt-4">
                       <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
                         <span className="inline-flex items-center gap-1">
-                          Confidence
+                          {getConfidenceLabel(claim, evidenceById)}
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <button
@@ -259,10 +369,7 @@ function Results() {
               <div className="mt-2 flex flex-wrap justify-center gap-3 text-xs">
                 {distributionData.map((d) => (
                   <span key={d.name} className="inline-flex items-center gap-1.5">
-                    <span
-                      className="h-2.5 w-2.5 rounded-full"
-                      style={{ background: d.color }}
-                    />
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: d.color }} />
                     {d.name} · {d.value}
                   </span>
                 ))}
@@ -271,22 +378,37 @@ function Results() {
 
             <Card className="rounded-3xl border-border/60 p-6">
               <div className="mb-1 text-sm font-semibold">Evidence source breakdown</div>
-              <div className="text-xs text-muted-foreground">Evidence items retrieved per source</div>
-              <div className="h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={sourceUsageData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis
-                      dataKey="source"
-                      tick={{ fontSize: 11 }}
-                      stroke="var(--muted-foreground)"
-                    />
-                    <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
-                    <RTooltip contentStyle={tooltipStyle} />
-                    <Bar dataKey="count" fill="var(--primary)" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+              <div className="text-xs text-muted-foreground">
+                Evidence items retrieved per source
               </div>
+              {sourceUsageData.length === 1 ? (
+                <CompactSourceUsage item={sourceUsageData[0]} />
+              ) : sourceUsageData.length > 1 ? (
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={sourceUsageData}>
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        stroke="var(--border)"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="source"
+                        tick={{ fontSize: 11 }}
+                        stroke="var(--muted-foreground)"
+                      />
+                      <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
+                      <RTooltip contentStyle={tooltipStyle} />
+                      <Bar dataKey="count" fill="var(--primary)" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <div className="grid h-56 place-items-center rounded-2xl border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                  Selected live official sources were checked, but no directly relevant evidence was
+                  attached to this report.
+                </div>
+              )}
             </Card>
           </div>
         </div>
@@ -295,28 +417,36 @@ function Results() {
         <div className="mt-12">
           <SectionTitle>Official evidence</SectionTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            Every card lists the source, evidence type, publication times and a direct citation link.
+            Every card lists the source, evidence type, publication times and a direct citation
+            link.
           </p>
-          <div className="mt-5 grid gap-5 md:grid-cols-2">
-            {evidence.map((e, i) => (
-              <motion.div
-                key={e.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
-              >
-                <EvidenceCard ev={e} />
-              </motion.div>
-            ))}
-          </div>
+          {evidence.length > 0 ? (
+            <div className="mt-5 grid gap-5 md:grid-cols-2">
+              {evidence.map((e, i) => (
+                <motion.div
+                  key={e.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04 }}
+                >
+                  <EvidenceCard ev={e} />
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <Card className="mt-5 rounded-3xl border-border/60 p-6 text-sm leading-relaxed text-muted-foreground">
+              Selected live official sources were checked, but no directly relevant official
+              evidence was found for these claims.
+            </Card>
+          )}
         </div>
 
         {/* Evidence-based Explanation */}
         <div className="mt-12">
           <SectionTitle>Evidence-based Explanation</SectionTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            For every claim: the official evidence retrieved, whether sources agree, why the verdict was
-            reached, and an actionable recommendation.
+            For every claim: the official evidence retrieved, whether sources agree, why the verdict
+            was reached, and an actionable recommendation.
           </p>
           <div className="mt-6 space-y-6">
             {claims.map((claim) => (
@@ -350,6 +480,99 @@ function Results() {
         </div>
       </div>
     </TooltipProvider>
+  );
+}
+
+function toMockClaim(claim: PhaseOneClaim): Claim {
+  return {
+    id: claim.id,
+    text: claim.text,
+    status:
+      claim.verdict === "supported"
+        ? "supported"
+        : claim.verdict === "refuted"
+          ? "refuted"
+          : "insufficient",
+    confidence: Math.round(claim.confidence * 100),
+    evidenceIds: claim.evidence.map((item) => item.id),
+    explanation: {
+      officialEvidence:
+        claim.evidence.length > 0
+          ? getEvidenceItemText(claim.evidence.length)
+          : "Selected live official sources were checked, but no directly relevant official evidence was found for this claim.",
+      sourceConsistency: getSourceConsistencyText(claim),
+      verdictExplanation: claim.explanation,
+      recommendation: claim.recommendation,
+    },
+  };
+}
+
+function toCoverageLabel(
+  coverage: PhaseOneReport["evidence_coverage"],
+): "High" | "Medium" | "Low" | "None" {
+  if (coverage === "high") return "High";
+  if (coverage === "medium") return "Medium";
+  if (coverage === "low") return "Low";
+  return "None";
+}
+
+function getConfidenceLabel(claim: Claim, evidenceById: Record<string, Evidence>): string {
+  const hasOfficialEvidence = claim.evidenceIds.some((id) => Boolean(evidenceById[id]));
+  return hasOfficialEvidence && claim.status !== "insufficient"
+    ? "Verification Confidence"
+    : "Analysis Confidence";
+}
+
+function toMockEvidence(claims: PhaseOneClaim[]): Evidence[] {
+  const byId = new Map<string, PhaseOneEvidence>();
+  for (const claim of claims) {
+    for (const item of claim.evidence) byId.set(item.id, item);
+  }
+
+  return [...byId.values()].map((item) => ({
+    id: item.id,
+    sourceKey: item.source_key,
+    evidenceType:
+      item.source_type === "rss_item"
+        ? "RSS notice"
+        : item.source_type === "hko_warning"
+          ? "Government announcement"
+          : item.source_type === "official_api"
+            ? "Official structured data"
+            : "Supporting evidence",
+    publishedAt: item.published_at ? formatHongKongTime(item.published_at) : "Not stated by source",
+    updatedAt: getOfficialUpdateLabel(item, formatHongKongTime),
+    retrievedAt: getRetrievedByVeriHkLabel(item, formatHongKongTime),
+    summary: `${item.summary} Freshness: ${item.freshness}. Retrieved: ${formatHongKongTime(
+      item.retrieved_at,
+    )}.`,
+    citation: item.title,
+    url: item.url,
+  }));
+}
+
+function buildGeneratedSourceUsage(evidence: Evidence[]) {
+  const counts = new Map<string, number>();
+  for (const item of evidence) {
+    const source = sourceByKey[item.sourceKey]?.shortName ?? item.sourceKey;
+    counts.set(source, (counts.get(source) ?? 0) + 1);
+  }
+  return [...counts.entries()].map(([source, count]) => ({ source, count }));
+}
+
+function CompactSourceUsage({ item }: { item: { source: string; count: number } }) {
+  return (
+    <div className="mt-5 rounded-2xl border bg-muted/30 p-4">
+      <div className="mb-2 flex items-center justify-between gap-4 text-sm">
+        <span className="font-medium">{item.source}</span>
+        <span className="text-muted-foreground">
+          {item.count} evidence {item.count === 1 ? "item" : "items"}
+        </span>
+      </div>
+      <div className="h-2 rounded-full bg-muted">
+        <div className="h-2 rounded-full bg-primary" style={{ width: "100%" }} />
+      </div>
+    </div>
   );
 }
 
@@ -397,7 +620,8 @@ function EvidenceCard({ ev }: { ev: Evidence }) {
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-[11px] text-muted-foreground">
         <div>
           <div>Published: {ev.publishedAt}</div>
-          <div>Updated: {ev.updatedAt}</div>
+          <div>{ev.updatedAt}</div>
+          {ev.retrievedAt && <div>{ev.retrievedAt}</div>}
         </div>
         <Button asChild size="sm" variant="outline" className="rounded-full">
           <a href={ev.url} target="_blank" rel="noreferrer">
