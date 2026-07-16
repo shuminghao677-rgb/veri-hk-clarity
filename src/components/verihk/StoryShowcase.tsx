@@ -217,41 +217,27 @@ function ClaimTimeline({ reducedMotion }: { reducedMotion: boolean }) {
 
 function EvidenceNetwork({ reducedMotion }: { reducedMotion: boolean }) {
   return (
-    <div className="mt-14">
-      <div className="grid gap-8 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] md:items-center">
-        {sources.map((source, index) => (
-          <div key={source.name} className="contents">
-            <motion.div
-              initial={reducedMotion ? false : { opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.08 }}
-              className="text-center"
-            >
-              <div className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-[rgb(8_23_45_/_14%)] bg-white">
-                <source.icon className="h-5 w-5 text-[#0878f9]" />
-              </div>
-              <div className="mt-4 text-sm font-semibold text-[rgb(8_23_45_/_86%)]">{source.name}</div>
-              <div className="mt-1 text-xs text-[rgb(8_23_45_/_48%)]">{source.label}</div>
-              <div className="mt-2 text-[11px] uppercase tracking-[0.16em] text-[rgb(8_23_45_/_42%)]">
-                {source.status}
-              </div>
-            </motion.div>
-            {index < sources.length - 1 && (
-              <motion.div
-                initial={reducedMotion ? false : { scaleX: 0 }}
-                whileInView={{ scaleX: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.18 + index * 0.08, duration: 0.35 }}
-                className="hidden h-px w-20 origin-left bg-[rgb(8_23_45_/_14%)] md:block"
-              />
-            )}
+    <div className="mt-14 grid gap-8 sm:grid-cols-2 md:grid-cols-4">
+      {sources.map((source, index) => (
+        <motion.div
+          key={source.name}
+          initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: index * 0.08 }}
+          className="text-center"
+        >
+          <div className="text-2xl font-semibold text-[rgb(8_23_45_/_88%)]">{source.name}</div>
+          <div className="mt-1 text-sm text-[rgb(8_23_45_/_48%)]">{source.label}</div>
+          <div className="mt-2 text-xs uppercase tracking-[0.16em] text-[rgb(8_23_45_/_42%)]">
+            {source.status}
           </div>
-        ))}
-      </div>
+        </motion.div>
+      ))}
     </div>
   );
 }
+
 
 function StoryCopy({
   eyebrow,
