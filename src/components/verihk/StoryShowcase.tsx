@@ -1,13 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
-import {
-  ArrowRight,
-  CloudSun,
-  FileText,
-  GraduationCap,
-  Landmark,
-  Route,
-} from "lucide-react";
+import { CloudSun, FileText, GraduationCap, Landmark, Route } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 
 const claims = [
