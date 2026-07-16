@@ -1,9 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
 import { FileText } from "lucide-react";
-
-
 import { Button } from "@/components/ui/button";
+
 
 const claims = [
   "The Hong Kong Observatory has issued a Black Rainstorm Warning.",
