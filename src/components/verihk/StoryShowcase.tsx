@@ -1,13 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
-import {
-  ArrowRight,
-  CloudSun,
-  FileText,
-  GraduationCap,
-  Landmark,
-  Route,
-} from "lucide-react";
+import { CloudSun, FileText, GraduationCap, Landmark, Route } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 
 const claims = [
@@ -43,32 +37,33 @@ export function StoryShowcase() {
             transition={{ duration: 0.65 }}
             className="max-w-4xl"
           >
-            <div className="text-xs font-medium uppercase tracking-[0.18em] text-[rgb(8_23_45_/_48%)]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
               Official Hong Kong data · Explainable AI
             </div>
-            <h1 className="mt-5 max-w-4xl text-5xl font-semibold leading-[1.02] text-[rgb(8_23_45_/_90%)] sm:text-6xl lg:text-[76px]">
-              Verify information with official Hong Kong data.
+            <h1 className="mt-6 max-w-4xl text-[2.75rem] font-semibold leading-[1.05] text-foreground sm:text-5xl md:text-6xl lg:text-[4.25rem]">
+              Verify information
+              <span className="text-gradient"> with official Hong Kong data.</span>
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-[rgb(8_23_45_/_58%)]">
-              VeriHK turns public claims into evidence-backed conclusions using live official
+            <p className="mt-7 max-w-2xl text-lg leading-8 text-muted-foreground">
+              VeriHK turns public claims into evidence-backed conclusions using up-to-date official
               sources.
             </p>
-            <div className="mt-9 flex flex-wrap items-center gap-5">
-              <Button asChild size="lg" className="h-11 rounded-xl bg-[#0878f9] px-5 shadow-none hover:bg-[#006ee8]">
-                <Link to="/verify">
-                  Start Verification
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
+            <div className="mt-10 flex flex-wrap items-center gap-4">
+              <Button asChild size="lg" className="h-11 rounded-xl bg-primary px-5 shadow-none hover:bg-primary/90">
+                <Link to="/verify">Start Verification</Link>
               </Button>
+
               <Link
                 to="/verify"
-                className="text-sm font-medium text-[rgb(8_23_45_/_64%)] underline decoration-[rgb(8_23_45_/_18%)] underline-offset-4 transition-colors hover:text-[rgb(8_23_45_/_88%)]"
+                className="text-sm font-medium text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground"
               >
                 Paste text or upload a screenshot
               </Link>
             </div>
           </motion.div>
         </div>
+
       </section>
 
       <section className="premium-container grid gap-14 py-24 md:py-32 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
@@ -151,13 +146,8 @@ function HeroBackground() {
           d="M0 486 C230 448 324 512 532 474 C720 440 866 378 1038 414 C1190 446 1302 392 1440 404 L1440 720 L0 720 Z"
           fill="url(#harbour)"
         />
-        <path
-          d="M130 430 L130 384 L160 384 L160 348 L188 348 L188 430 M228 430 L228 332 L263 332 L263 430 M305 430 L305 365 L338 365 L338 430 M390 430 L390 310 L424 310 L424 430 M462 430 L462 356 L502 356 L502 430 M550 430 L550 286 L590 286 L590 430 M636 430 L636 344 L668 344 L668 430 M718 430 L718 250 L756 250 L756 430 M800 430 L800 324 L832 324 L832 430 M884 430 L884 360 L924 360 L924 430 M974 430 L974 304 L1010 304 L1010 430 M1062 430 L1062 336 L1098 336 L1098 430 M1142 430 L1142 284 L1182 284 L1182 430 M1238 430 L1238 354 L1278 354 L1278 430"
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity="0.18"
-          strokeWidth="2"
-        />
+        {/* Building skyline removed for a cleaner hero background */}
+
         <path
           d="M88 464 C260 444 390 458 548 446 C742 431 932 459 1090 438 C1240 418 1350 432 1440 424"
           fill="none"
