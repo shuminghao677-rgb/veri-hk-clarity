@@ -50,12 +50,10 @@ export function StoryShowcase() {
               sources.
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-4">
-              <Button asChild size="lg" className="h-12 rounded-full bg-primary px-6 shadow-soft hover:bg-primary/90">
-                <Link to="/verify">
-                  Start Verification
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
+              <Button asChild size="lg" className="h-11 rounded-xl bg-primary px-5 shadow-none hover:bg-primary/90">
+                <Link to="/verify">Start Verification</Link>
               </Button>
+
               <Link
                 to="/verify"
                 className="text-sm font-medium text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground"
