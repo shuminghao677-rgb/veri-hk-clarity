@@ -17,11 +17,9 @@ export function PremiumNav() {
     <header className="sticky top-0 z-40 border-b border-[rgb(8_23_45_/_10%)] bg-white/85 backdrop-blur-[18px]">
       <div className="premium-container flex h-14 items-center gap-3">
         <Link to="/" className="flex shrink-0 items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-[#08172d] text-white">
-            <ShieldCheck className="h-4 w-4" />
-          </span>
           <span className="text-sm font-semibold text-[rgb(8_23_45_/_88%)]">VeriHK</span>
         </Link>
+
 
         <nav className="ml-auto hidden items-center gap-7 md:flex">
           {navItems.map((item) => {
