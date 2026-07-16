@@ -151,20 +151,8 @@ function HeroBackground() {
           d="M0 486 C230 448 324 512 532 474 C720 440 866 378 1038 414 C1190 446 1302 392 1440 404 L1440 720 L0 720 Z"
           fill="url(#harbour)"
         />
-        {/* Building skyline removed for a cleaner hero background */}
+        {/* Decorative skyline and accent line removed for a cleaner hero background */}
 
-        <path
-          d="M88 464 C260 444 390 458 548 446 C742 431 932 459 1090 438 C1240 418 1350 432 1440 424"
-          fill="none"
-          stroke="#0878f9"
-          strokeOpacity="0.18"
-          strokeWidth="1.4"
-        />
-        <g fill="#0878f9" opacity="0.18">
-          <circle cx="390" cy="310" r="4" />
-          <circle cx="718" cy="250" r="4" />
-          <circle cx="1142" cy="284" r="4" />
-        </g>
       </svg>
     </div>
   );
