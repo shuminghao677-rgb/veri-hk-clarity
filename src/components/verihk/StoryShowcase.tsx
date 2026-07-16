@@ -51,11 +51,13 @@ export function StoryShowcase() {
               VeriHK turns public claims into evidence-backed conclusions using up-to-date official
               sources.
             </p>
-            <div className="mt-10 flex flex-wrap items-center gap-4">
-              <Button asChild size="lg" className="h-11 rounded-xl bg-primary px-5 shadow-none hover:bg-primary/90">
-                <Link to="/verify">Start Verification</Link>
-              </Button>
-
+            <div className="mt-10 flex flex-wrap items-center gap-6">
+              <Link
+                to="/verify"
+                className="text-base font-bold text-foreground transition-colors hover:text-primary"
+              >
+                Start Verification
+              </Link>
               <Link
                 to="/verify"
                 className="text-sm font-medium text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground"
@@ -63,6 +65,7 @@ export function StoryShowcase() {
                 Paste text or upload a screenshot
               </Link>
             </div>
+
           </motion.div>
         </div>
 
