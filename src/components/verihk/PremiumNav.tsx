@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
+
 
 const navItems = [
   { label: "Story", to: "/" },
@@ -43,11 +43,13 @@ export function PremiumNav() {
           })}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2 md:ml-3">
-          <Button asChild className="h-9 rounded-xl bg-[#0878f9] px-4 text-sm shadow-none hover:bg-[#006ee8]">
-            <Link to="/verify">Start Verification</Link>
-          </Button>
-        </div>
+        <Link
+          to="/verify"
+          className="ml-auto text-sm font-bold text-foreground transition-colors hover:text-primary md:ml-3"
+        >
+          Start Verification
+        </Link>
+
       </div>
     </header>
   );

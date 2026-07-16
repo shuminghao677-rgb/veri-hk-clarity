@@ -1,8 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
-import { CloudSun, FileText, GraduationCap, Landmark, Route } from "lucide-react";
-
+import { FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
 
 const claims = [
   "The Hong Kong Observatory has issued a Black Rainstorm Warning.",
@@ -11,17 +11,18 @@ const claims = [
 ];
 
 const sources = [
-  { name: "HKO", label: "Hong Kong Observatory", icon: CloudSun, status: "live" },
-  { name: "TD", label: "Transport Department", icon: Route, status: "live" },
-  { name: "GovHK", label: "Government news", icon: Landmark, status: "live" },
-  { name: "EDB", label: "Education Bureau", icon: GraduationCap, status: "future" },
+  { name: "HKO", label: "Hong Kong Observatory", status: "live" },
+  { name: "TD", label: "Transport Department", status: "live" },
+  { name: "GovHK", label: "Government news", status: "live" },
+  { name: "EDB", label: "Education Bureau", status: "future" },
 ];
 
 const verdicts = [
-  { label: "Supported", value: "01", className: "text-[#12805c]" },
-  { label: "Refuted", value: "01", className: "text-[#d92d20]" },
-  { label: "Need evidence", value: "01", className: "text-[#a16207]" },
+  { label: "Supported", className: "text-[#12805c]" },
+  { label: "Refuted", className: "text-[#d92d20]" },
+  { label: "Need evidence", className: "text-[#a16207]" },
 ];
+
 
 export function StoryShowcase() {
   const reducedMotion = useReducedMotion();
@@ -49,11 +50,13 @@ export function StoryShowcase() {
               VeriHK turns public claims into evidence-backed conclusions using up-to-date official
               sources.
             </p>
-            <div className="mt-10 flex flex-wrap items-center gap-4">
-              <Button asChild size="lg" className="h-11 rounded-xl bg-primary px-5 shadow-none hover:bg-primary/90">
-                <Link to="/verify">Start Verification</Link>
-              </Button>
-
+            <div className="mt-10 flex flex-wrap items-center gap-6">
+              <Link
+                to="/verify"
+                className="text-base font-bold text-foreground transition-colors hover:text-primary"
+              >
+                Start Verification
+              </Link>
               <Link
                 to="/verify"
                 className="text-sm font-medium text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground"
@@ -63,8 +66,8 @@ export function StoryShowcase() {
             </div>
           </motion.div>
         </div>
-
       </section>
+
 
       <section className="premium-container grid gap-14 py-24 md:py-32 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
         <StoryCopy eyebrow="Scene 2" title="Claims are extracted before evidence is searched.">
@@ -100,14 +103,12 @@ export function StoryShowcase() {
                 transition={{ delay: index * 0.08 }}
                 className="border-b border-[rgb(8_23_45_/_10%)] pb-6 last:border-b-0 md:border-b-0 md:border-r md:pb-0 md:pr-6 md:last:border-r-0"
               >
-                <div className={`text-5xl font-semibold ${item.className}`}>{item.value}</div>
-                <div className="mt-3 text-sm font-medium text-[rgb(8_23_45_/_82%)]">
-                  {item.label}
-                </div>
+                <div className={`text-3xl font-semibold ${item.className}`}>{item.label}</div>
               </motion.div>
             ))}
           </div>
         </div>
+
         <div className="mt-16">
           <Button asChild size="lg" className="h-11 rounded-xl bg-[#0878f9] px-5 shadow-none hover:bg-[#006ee8]">
             <Link to="/dashboard">Enter dashboard</Link>
@@ -146,20 +147,8 @@ function HeroBackground() {
           d="M0 486 C230 448 324 512 532 474 C720 440 866 378 1038 414 C1190 446 1302 392 1440 404 L1440 720 L0 720 Z"
           fill="url(#harbour)"
         />
-        {/* Building skyline removed for a cleaner hero background */}
+        {/* Decorative skyline and accent line removed for a cleaner hero background */}
 
-        <path
-          d="M88 464 C260 444 390 458 548 446 C742 431 932 459 1090 438 C1240 418 1350 432 1440 424"
-          fill="none"
-          stroke="#0878f9"
-          strokeOpacity="0.18"
-          strokeWidth="1.4"
-        />
-        <g fill="#0878f9" opacity="0.18">
-          <circle cx="390" cy="310" r="4" />
-          <circle cx="718" cy="250" r="4" />
-          <circle cx="1142" cy="284" r="4" />
-        </g>
       </svg>
     </div>
   );
@@ -215,41 +204,27 @@ function ClaimTimeline({ reducedMotion }: { reducedMotion: boolean }) {
 
 function EvidenceNetwork({ reducedMotion }: { reducedMotion: boolean }) {
   return (
-    <div className="mt-14">
-      <div className="grid gap-8 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] md:items-center">
-        {sources.map((source, index) => (
-          <div key={source.name} className="contents">
-            <motion.div
-              initial={reducedMotion ? false : { opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.08 }}
-              className="text-center"
-            >
-              <div className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-[rgb(8_23_45_/_14%)] bg-white">
-                <source.icon className="h-5 w-5 text-[#0878f9]" />
-              </div>
-              <div className="mt-4 text-sm font-semibold text-[rgb(8_23_45_/_86%)]">{source.name}</div>
-              <div className="mt-1 text-xs text-[rgb(8_23_45_/_48%)]">{source.label}</div>
-              <div className="mt-2 text-[11px] uppercase tracking-[0.16em] text-[rgb(8_23_45_/_42%)]">
-                {source.status}
-              </div>
-            </motion.div>
-            {index < sources.length - 1 && (
-              <motion.div
-                initial={reducedMotion ? false : { scaleX: 0 }}
-                whileInView={{ scaleX: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.18 + index * 0.08, duration: 0.35 }}
-                className="hidden h-px w-20 origin-left bg-[rgb(8_23_45_/_14%)] md:block"
-              />
-            )}
+    <div className="mt-14 grid gap-8 sm:grid-cols-2 md:grid-cols-4">
+      {sources.map((source, index) => (
+        <motion.div
+          key={source.name}
+          initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: index * 0.08 }}
+          className="text-center"
+        >
+          <div className="text-2xl font-semibold text-[rgb(8_23_45_/_88%)]">{source.name}</div>
+          <div className="mt-1 text-sm text-[rgb(8_23_45_/_48%)]">{source.label}</div>
+          <div className="mt-2 text-xs uppercase tracking-[0.16em] text-[rgb(8_23_45_/_42%)]">
+            {source.status}
           </div>
-        ))}
-      </div>
+        </motion.div>
+      ))}
     </div>
   );
 }
+
 
 function StoryCopy({
   eyebrow,
