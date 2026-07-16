@@ -61,8 +61,8 @@ export function StoryShowcase() {
                 Paste text or upload a screenshot
               </Link>
             </div>
-
           </motion.div>
+
         </div>
       </section>
 
