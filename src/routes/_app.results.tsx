@@ -50,6 +50,7 @@ import {
   type EvidenceType,
 } from "@/lib/mock-data";
 import { SourceIcon } from "@/components/verihk/SourceIcon";
+import { TrafficEvidenceMap } from "@/components/TrafficEvidenceMap";
 import {
   LATEST_REPORT_KEY,
   isPhaseOneReport,
@@ -59,12 +60,12 @@ import {
 } from "@/lib/report-contract";
 import { formatHongKongTime } from "@/lib/live-sources";
 import {
-  getEvidenceItemText,
+  buildClaimDisplayExplanation,
   getHeaderReportLabels,
   getOfficialUpdateLabel,
   getRetrievedByVeriHkLabel,
-  getSourceConsistencyText,
 } from "@/lib/report-display";
+import { hasMatchedTransportEvidence } from "@/lib/traffic-map-utils";
 
 export const Route = createFileRoute("/_app/results")({
   head: () => ({
@@ -103,6 +104,7 @@ const statusMeta: Record<
 
 const evidenceTypeStyles: Record<EvidenceType, string> = {
   "Official structured data": "bg-primary/10 text-primary border-primary/20",
+  "Official Weather API": "bg-primary/10 text-primary border-primary/20",
   "Government announcement": "bg-success/10 text-success border-success/20",
   "RSS notice": "bg-warning/15 text-warning-foreground border-warning/30",
   "Supporting evidence": "bg-muted text-foreground/80 border-border",
@@ -160,18 +162,21 @@ function Results() {
     : mockDistributionData;
   const sourceUsageData = isGenerated ? buildGeneratedSourceUsage(evidence) : mockSourceUsageData;
   const retrievalCounts = generatedReport?.retrieval_counts;
+  const showTrafficMap = generatedReport
+    ? hasMatchedTransportEvidence(generatedReport.claims)
+    : false;
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
+      <div className="premium-container py-8 md:py-14">
         {/* Header */}
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+        <div className="mb-10 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border bg-background/60 px-3 py-1 text-[11px] font-medium text-muted-foreground">
-              <Sparkles className="h-3 w-3 text-primary" /> {reportLabel}
+            <div className="inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
+              <Sparkles className="h-3.5 w-3.5 text-foreground" /> {reportLabel}
             </div>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-              Evidence-based Explanation
+            <h1 className="mt-4 max-w-3xl text-4xl font-semibold leading-tight tracking-normal md:text-6xl">
+              Evidence report, built from official signals.
             </h1>
 
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -185,11 +190,11 @@ function Results() {
               <MetaChip icon={Clock}>Last checked {reportMeta.lastCheckedAt}</MetaChip>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 lg:justify-end">
             <Button asChild variant="outline" className="rounded-full">
               <Link to="/history">View history</Link>
             </Button>
-            <Button asChild className="rounded-full shadow-elegant">
+            <Button asChild className="rounded-full shadow-soft">
               <Link to="/verify">New verification</Link>
             </Button>
           </div>
@@ -214,7 +219,7 @@ function Results() {
         </div>
 
         {/* Uploaded content */}
-        <Card className="mt-8 rounded-3xl border-border/60 p-6 md:p-8">
+        <Card className="panel mt-8 rounded-[2rem] p-6 md:p-8">
           <div className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
             <FileText className="h-4 w-4" /> SUBMITTED CONTENT
           </div>
@@ -227,17 +232,34 @@ function Results() {
           )}
           {isGenerated && retrievalCounts && (
             <div className="mt-4 grid gap-2 text-xs md:grid-cols-3">
-              <div className="rounded-2xl border bg-muted/30 p-3">
+              <div className="rounded-2xl border bg-background/65 p-3">
                 <div className="font-medium">{retrievalCounts.official_sources_queried}</div>
                 <div className="mt-1 text-muted-foreground">Official endpoints queried</div>
               </div>
-              <div className="rounded-2xl border bg-muted/30 p-3">
+              <div className="rounded-2xl border bg-background/65 p-3">
                 <div className="font-medium">{retrievalCounts.feed_items_fetched}</div>
                 <div className="mt-1 text-muted-foreground">Official records retrieved</div>
               </div>
-              <div className="rounded-2xl border bg-muted/30 p-3">
-                <div className="font-medium">{retrievalCounts.relevant_evidence_attached}</div>
-                <div className="mt-1 text-muted-foreground">Relevant evidence attached</div>
+              <div className="rounded-2xl border bg-background/65 p-3">
+                <div className="font-medium">
+                  {retrievalCounts.unique_relevant_evidence_records ??
+                    retrievalCounts.relevant_evidence_attached}
+                </div>
+                <div className="mt-1 text-muted-foreground">
+                  Unique relevant evidence{" "}
+                  {(retrievalCounts.unique_relevant_evidence_records ??
+                    retrievalCounts.relevant_evidence_attached) === 1
+                    ? "item"
+                    : "items"}
+                </div>
+                {retrievalCounts.claim_evidence_links &&
+                  retrievalCounts.claim_evidence_links >
+                    (retrievalCounts.unique_relevant_evidence_records ??
+                      retrievalCounts.relevant_evidence_attached) && (
+                    <div className="mt-1 text-muted-foreground">
+                      Used across {retrievalCounts.claim_evidence_links} claims
+                    </div>
+                  )}
               </div>
             </div>
           )}
@@ -246,7 +268,7 @@ function Results() {
               {generatedReport.source_freshness.map((source) => (
                 <div
                   key={`${source.source_key}-${source.retrieved_at}`}
-                  className="rounded-2xl border bg-muted/30 p-3 text-xs"
+                  className="rounded-2xl border bg-background/65 p-3 text-xs"
                 >
                   <div className="font-medium">{source.source_name}</div>
                   <div className="mt-1 text-muted-foreground">Freshness: {source.freshness}</div>
@@ -278,7 +300,7 @@ function Results() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
                 >
-                  <Card className="rounded-3xl border-border/60 p-6 shadow-soft">
+                  <Card className="panel rounded-3xl p-6">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -343,7 +365,7 @@ function Results() {
           {/* Charts */}
           <div className="space-y-5">
             <SectionTitle>Insights</SectionTitle>
-            <Card className="rounded-3xl border-border/60 p-6">
+            <Card className="panel rounded-3xl p-6">
               <div className="mb-1 text-sm font-semibold">Verification distribution</div>
               <div className="text-xs text-muted-foreground">By claim status in this report</div>
               <div className="h-56">
@@ -376,7 +398,7 @@ function Results() {
               </div>
             </Card>
 
-            <Card className="rounded-3xl border-border/60 p-6">
+            <Card className="panel rounded-3xl p-6">
               <div className="mb-1 text-sm font-semibold">Evidence source breakdown</div>
               <div className="text-xs text-muted-foreground">
                 Evidence items retrieved per source
@@ -434,12 +456,16 @@ function Results() {
               ))}
             </div>
           ) : (
-            <Card className="mt-5 rounded-3xl border-border/60 p-6 text-sm leading-relaxed text-muted-foreground">
+            <Card className="panel mt-5 rounded-3xl p-6 text-sm leading-relaxed text-muted-foreground">
               Selected live official sources were checked, but no directly relevant official
               evidence was found for these claims.
             </Card>
           )}
         </div>
+
+        {showTrafficMap && (
+          <TrafficEvidenceMap claims={generatedReport!.claims} formatTime={formatHongKongTime} />
+        )}
 
         {/* Evidence-based Explanation */}
         <div className="mt-12">
@@ -450,7 +476,7 @@ function Results() {
           </p>
           <div className="mt-6 space-y-6">
             {claims.map((claim) => (
-              <Card key={claim.id} className="rounded-3xl border-border/60 p-6 md:p-8">
+              <Card key={claim.id} className="panel rounded-3xl p-6 md:p-8">
                 <div className="mb-5 flex flex-wrap items-center gap-2">
                   <Badge
                     variant="outline"
@@ -484,6 +510,7 @@ function Results() {
 }
 
 function toMockClaim(claim: PhaseOneClaim): Claim {
+  const explanation = buildClaimDisplayExplanation(claim);
   return {
     id: claim.id,
     text: claim.text,
@@ -495,15 +522,7 @@ function toMockClaim(claim: PhaseOneClaim): Claim {
           : "insufficient",
     confidence: Math.round(claim.confidence * 100),
     evidenceIds: claim.evidence.map((item) => item.id),
-    explanation: {
-      officialEvidence:
-        claim.evidence.length > 0
-          ? getEvidenceItemText(claim.evidence.length)
-          : "Selected live official sources were checked, but no directly relevant official evidence was found for this claim.",
-      sourceConsistency: getSourceConsistencyText(claim),
-      verdictExplanation: claim.explanation,
-      recommendation: claim.recommendation,
-    },
+    explanation,
   };
 }
 
@@ -535,11 +554,13 @@ function toMockEvidence(claims: PhaseOneClaim[]): Evidence[] {
     evidenceType:
       item.source_type === "rss_item"
         ? "RSS notice"
-        : item.source_type === "hko_warning"
-          ? "Government announcement"
-          : item.source_type === "official_api"
-            ? "Official structured data"
-            : "Supporting evidence",
+        : item.source_type === "government_rss"
+          ? "RSS notice"
+          : item.source_type === "hko_warning"
+            ? "Official Weather API"
+            : item.source_type === "official_api" || item.source_type === "government_webpage"
+              ? "Official structured data"
+              : "Supporting evidence",
     publishedAt: item.published_at ? formatHongKongTime(item.published_at) : "Not stated by source",
     updatedAt: getOfficialUpdateLabel(item, formatHongKongTime),
     retrievedAt: getRetrievedByVeriHkLabel(item, formatHongKongTime),
@@ -562,7 +583,7 @@ function buildGeneratedSourceUsage(evidence: Evidence[]) {
 
 function CompactSourceUsage({ item }: { item: { source: string; count: number } }) {
   return (
-    <div className="mt-5 rounded-2xl border bg-muted/30 p-4">
+    <div className="mt-5 rounded-2xl border bg-background/65 p-4">
       <div className="mb-2 flex items-center justify-between gap-4 text-sm">
         <span className="font-medium">{item.source}</span>
         <span className="text-muted-foreground">
@@ -579,7 +600,7 @@ function CompactSourceUsage({ item }: { item: { source: string; count: number } 
 function EvidenceCard({ ev }: { ev: Evidence }) {
   const src = sourceByKey[ev.sourceKey];
   return (
-    <Card className="flex h-full flex-col rounded-3xl border-border/60 p-6 shadow-soft">
+    <Card className="panel flex h-full flex-col rounded-3xl p-6">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl border border-border/70 bg-muted/60 text-foreground/80">
@@ -612,7 +633,7 @@ function EvidenceCard({ ev }: { ev: Evidence }) {
 
       <p className="mt-4 text-sm leading-relaxed text-foreground/90">{ev.summary}</p>
 
-      <div className="mt-4 rounded-2xl border-l-2 border-primary/40 bg-muted/40 p-3 pl-4">
+      <div className="mt-4 rounded-2xl border-l-2 border-foreground/30 bg-background/70 p-3 pl-4">
         <Quote className="mb-1 h-3 w-3 text-primary" />
         <p className="text-xs italic leading-relaxed text-muted-foreground">{ev.citation}</p>
       </div>
@@ -696,14 +717,14 @@ function StatCard({
     warning: "bg-warning/15 text-warning-foreground",
   };
   return (
-    <Card className="rounded-3xl border-border/60 p-5 shadow-soft">
+    <Card className="panel rounded-3xl p-5">
       <div className="flex items-center justify-between">
         <div className="text-xs font-medium text-muted-foreground">{label}</div>
         <div className={`grid h-8 w-8 place-items-center rounded-xl ${toneMap[tone]}`}>
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <div className="mt-3 text-3xl font-semibold tracking-tight">{value}</div>
+      <div className="mt-3 text-3xl font-semibold tracking-normal">{value}</div>
     </Card>
   );
 }

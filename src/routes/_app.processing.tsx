@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { processingSteps } from "@/lib/mock-data";
 import { analyzeText } from "@/lib/preliminary-analysis";
 import { LATEST_REPORT_KEY, PENDING_INPUT_KEY, isPhaseOneReport } from "@/lib/report-contract";
+import {
+  getProcessingErrorMessage,
+  saveReportAndScheduleNavigationOnce,
+} from "@/lib/processing-flow";
 
 export const Route = createFileRoute("/_app/processing")({
   head: () => ({
@@ -30,7 +34,9 @@ function ProcessingPage() {
   const [active, setActive] = useState(0);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
+  const [busyRetrying, setBusyRetrying] = useState(false);
   const startedRef = useRef(false);
+  const completedRef = useRef(false);
 
   const viewDemoReport = useCallback(() => {
     window.sessionStorage.removeItem(LATEST_REPORT_KEY);
@@ -48,8 +54,10 @@ function ProcessingPage() {
     }
 
     setError("");
+    setBusyRetrying(false);
     setProgress(8);
     setActive(0);
+    completedRef.current = false;
 
     const stepInt = window.setInterval(() => {
       setActive((s) => {
@@ -61,6 +69,9 @@ function ProcessingPage() {
     const progInt = window.setInterval(() => {
       setProgress((p) => Math.min(p + 0.7, 94));
     }, TICK_MS);
+    const busyRetryTimer = window.setTimeout(() => {
+      setBusyRetrying(true);
+    }, 1400);
 
     try {
       const report = await analyzeText({ data: { text } });
@@ -68,18 +79,25 @@ function ProcessingPage() {
         throw new Error("The server returned an unexpected analysis format.");
       }
 
-      window.sessionStorage.setItem(LATEST_REPORT_KEY, JSON.stringify(report));
-      window.sessionStorage.removeItem(PENDING_INPUT_KEY);
+      const saved = saveReportAndScheduleNavigationOnce({
+        report,
+        completedRef,
+        storage: window.sessionStorage,
+        navigateToResults: () => navigate({ to: "/results" }),
+        setTimeoutFn: window.setTimeout,
+      });
+      if (!saved) return;
       setActive(processingSteps.length);
       setProgress(100);
-      window.setTimeout(() => navigate({ to: "/results" }), 400);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "The analysis request failed.";
+      const message = getProcessingErrorMessage(err);
       setError(message);
+      setBusyRetrying(false);
       setProgress((p) => Math.min(p, 94));
     } finally {
       window.clearInterval(stepInt);
       window.clearInterval(progInt);
+      window.clearTimeout(busyRetryTimer);
     }
   }, [navigate]);
 
@@ -90,12 +108,12 @@ function ProcessingPage() {
   }, [runAnalysis]);
 
   return (
-    <div className="grid min-h-[calc(100vh-4rem)] place-items-center px-4 py-10">
-      <Card className="glass w-full max-w-2xl rounded-3xl p-8 shadow-elegant md:p-12">
+    <div className="premium-container grid min-h-[calc(100vh-4rem)] place-items-center py-10">
+      <Card className="w-full max-w-3xl border-0 bg-transparent p-0 shadow-none">
         <div className="mb-8 text-center">
           <div
-            className={`mx-auto grid h-14 w-14 place-items-center rounded-2xl text-white shadow-elegant ${
-              error ? "bg-destructive" : "gradient-primary"
+            className={`mx-auto grid h-12 w-12 place-items-center rounded-xl text-white ${
+              error ? "bg-destructive" : "bg-foreground"
             }`}
           >
             {error ? (
@@ -104,13 +122,15 @@ function ProcessingPage() {
               <Loader2 className="h-6 w-6 animate-spin" />
             )}
           </div>
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight md:text-3xl">
-            {error ? "Analysis could not finish" : "Analyzing your content"}
+          <h1 className="mt-5 text-3xl font-semibold tracking-normal md:text-4xl">
+            {error ? "Analysis could not finish" : "Building the evidence network"}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {error
               ? "You can retry the preliminary AI analysis or view the original demo report."
-              : "Generating preliminary AI analysis. Official source checking is not enabled yet."}
+              : busyRetrying
+                ? "The AI service is busy. Retrying securely..."
+                : "Extracting claims, querying official sources, and preparing an explainable report."}
           </p>
         </div>
 
@@ -122,7 +142,7 @@ function ProcessingPage() {
           </span>
         </div>
 
-        <ol className="mt-8 space-y-3">
+        <ol className="relative mt-10 space-y-0 pl-8 before:absolute before:left-[17px] before:top-3 before:h-[calc(100%-24px)] before:w-px before:bg-[rgb(8_23_45_/_12%)]">
           {processingSteps.map((s, i) => {
             const done = i < active;
             const current = i === active;
@@ -132,34 +152,28 @@ function ProcessingPage() {
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.04 }}
-                className={`flex items-center gap-4 rounded-2xl border p-4 transition-colors ${
-                  current
-                    ? "border-primary/40 bg-primary/5"
-                    : done
-                      ? "border-success/30 bg-success/5"
-                      : "border-border/60 bg-background/40"
-                }`}
+                className="relative flex items-start gap-4 border-b border-[rgb(8_23_45_/_10%)] py-5 last:border-b-0"
               >
                 <div
-                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${
+                  className={`z-10 grid h-5 w-5 shrink-0 place-items-center rounded-full border bg-background ${
                     done
-                      ? "bg-success text-success-foreground"
+                      ? "border-success text-success"
                       : current
-                        ? "gradient-primary text-white"
-                        : "bg-muted text-muted-foreground"
+                        ? "border-[#0878f9] text-[#0878f9]"
+                        : "border-[rgb(8_23_45_/_18%)] text-muted-foreground"
                   }`}
                 >
                   {done ? (
-                    <Check className="h-4 w-4" />
+                    <Check className="h-3 w-3" />
                   ) : current ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
-                    <span className="text-[11px] font-semibold">{i + 1}</span>
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{s.label}</div>
-                  <div className="truncate text-[11px] text-muted-foreground">
+                  <div className="text-sm font-medium">{s.label}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">
                     {done ? "Completed" : current ? s.detail : "Queued"}
                   </div>
                 </div>

@@ -1,0 +1,284 @@
+import { Link } from "@tanstack/react-router";
+import { motion, useReducedMotion } from "framer-motion";
+import {
+  ArrowRight,
+  CloudSun,
+  FileText,
+  GraduationCap,
+  Landmark,
+  Route,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+const claims = [
+  "The Hong Kong Observatory has issued a Black Rainstorm Warning.",
+  "All schools will suspend classes tomorrow.",
+  "Major roads in Kowloon are expected to close.",
+];
+
+const sources = [
+  { name: "HKO", label: "Hong Kong Observatory", icon: CloudSun, status: "live" },
+  { name: "TD", label: "Transport Department", icon: Route, status: "live" },
+  { name: "GovHK", label: "Government news", icon: Landmark, status: "live" },
+  { name: "EDB", label: "Education Bureau", icon: GraduationCap, status: "future" },
+];
+
+const verdicts = [
+  { label: "Supported", value: "01", className: "text-[#12805c]" },
+  { label: "Refuted", value: "01", className: "text-[#d92d20]" },
+  { label: "Need evidence", value: "01", className: "text-[#a16207]" },
+];
+
+export function StoryShowcase() {
+  const reducedMotion = useReducedMotion();
+
+  return (
+    <div className="overflow-hidden bg-[#fafbfd]">
+      <section className="relative min-h-[calc(100vh-3.5rem)]">
+        <HeroBackground />
+        <div className="premium-container relative grid min-h-[calc(100vh-3.5rem)] items-center pt-8">
+          <motion.div
+            initial={reducedMotion ? false : { opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.65 }}
+            className="max-w-4xl"
+          >
+            <div className="text-xs font-medium uppercase tracking-[0.18em] text-[rgb(8_23_45_/_48%)]">
+              Official Hong Kong data · Explainable AI
+            </div>
+            <h1 className="mt-5 max-w-4xl text-5xl font-semibold leading-[1.02] text-[rgb(8_23_45_/_90%)] sm:text-6xl lg:text-[76px]">
+              Verify information with official Hong Kong data.
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-[rgb(8_23_45_/_58%)]">
+              VeriHK turns public claims into evidence-backed conclusions using live official
+              sources.
+            </p>
+            <div className="mt-9 flex flex-wrap items-center gap-5">
+              <Button asChild size="lg" className="h-11 rounded-xl bg-[#0878f9] px-5 shadow-none hover:bg-[#006ee8]">
+                <Link to="/verify">
+                  Start Verification
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+              <Link
+                to="/verify"
+                className="text-sm font-medium text-[rgb(8_23_45_/_64%)] underline decoration-[rgb(8_23_45_/_18%)] underline-offset-4 transition-colors hover:text-[rgb(8_23_45_/_88%)]"
+              >
+                Paste text or upload a screenshot
+              </Link>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      <section className="premium-container grid gap-14 py-24 md:py-32 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
+        <StoryCopy eyebrow="Scene 2" title="Claims are extracted before evidence is searched.">
+          A public message can mix weather, school and transport statements. VeriHK separates each
+          factual claim so the right source can be checked.
+        </StoryCopy>
+        <ClaimTimeline reducedMotion={Boolean(reducedMotion)} />
+      </section>
+
+      <section className="border-y border-[rgb(8_23_45_/_10%)] bg-white/56 py-24 md:py-32">
+        <div className="premium-container">
+          <StoryCopy eyebrow="Scene 3" title="Official evidence returns as a source network.">
+            Small, specific connectors route each claim to the relevant live source. The result is
+            traceable without looking like a dense knowledge graph.
+          </StoryCopy>
+          <EvidenceNetwork reducedMotion={Boolean(reducedMotion)} />
+        </div>
+      </section>
+
+      <section className="premium-container py-24 md:py-32">
+        <div className="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
+          <StoryCopy eyebrow="Scene 4" title="A calm verdict, with the evidence still visible.">
+            The interface resolves into three readable outcomes while preserving the official
+            records behind each decision.
+          </StoryCopy>
+          <div className="grid gap-6 border-y border-[rgb(8_23_45_/_12%)] py-8 md:grid-cols-3">
+            {verdicts.map((item, index) => (
+              <motion.div
+                key={item.label}
+                initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.08 }}
+                className="border-b border-[rgb(8_23_45_/_10%)] pb-6 last:border-b-0 md:border-b-0 md:border-r md:pb-0 md:pr-6 md:last:border-r-0"
+              >
+                <div className={`text-5xl font-semibold ${item.className}`}>{item.value}</div>
+                <div className="mt-3 text-sm font-medium text-[rgb(8_23_45_/_82%)]">
+                  {item.label}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+        <div className="mt-16">
+          <Button asChild size="lg" className="h-11 rounded-xl bg-[#0878f9] px-5 shadow-none hover:bg-[#006ee8]">
+            <Link to="/dashboard">Enter dashboard</Link>
+          </Button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function HeroBackground() {
+  return (
+    <div className="absolute inset-0 overflow-hidden" aria-hidden>
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,#f7f9fc_0%,#fbfcfe_48%,#fafbfd_100%)]" />
+      <div
+        className="absolute inset-0 bg-cover bg-center opacity-25"
+        style={{ backgroundImage: "url('/images/verihk-hong-kong-hero.webp')" }}
+      />
+      <svg
+        viewBox="0 0 1440 720"
+        className="absolute inset-x-0 bottom-0 h-[72%] w-full text-[#08172d]"
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <linearGradient id="harbour" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#0878f9" stopOpacity="0.13" />
+            <stop offset="100%" stopColor="#0878f9" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M0 382 C120 310 220 324 350 272 C520 204 625 247 760 194 C912 135 1057 157 1210 101 C1292 72 1370 78 1440 48 L1440 720 L0 720 Z"
+          fill="#dce8f3"
+          opacity="0.46"
+        />
+        <path
+          d="M0 486 C230 448 324 512 532 474 C720 440 866 378 1038 414 C1190 446 1302 392 1440 404 L1440 720 L0 720 Z"
+          fill="url(#harbour)"
+        />
+        <path
+          d="M130 430 L130 384 L160 384 L160 348 L188 348 L188 430 M228 430 L228 332 L263 332 L263 430 M305 430 L305 365 L338 365 L338 430 M390 430 L390 310 L424 310 L424 430 M462 430 L462 356 L502 356 L502 430 M550 430 L550 286 L590 286 L590 430 M636 430 L636 344 L668 344 L668 430 M718 430 L718 250 L756 250 L756 430 M800 430 L800 324 L832 324 L832 430 M884 430 L884 360 L924 360 L924 430 M974 430 L974 304 L1010 304 L1010 430 M1062 430 L1062 336 L1098 336 L1098 430 M1142 430 L1142 284 L1182 284 L1182 430 M1238 430 L1238 354 L1278 354 L1278 430"
+          fill="none"
+          stroke="currentColor"
+          strokeOpacity="0.18"
+          strokeWidth="2"
+        />
+        <path
+          d="M88 464 C260 444 390 458 548 446 C742 431 932 459 1090 438 C1240 418 1350 432 1440 424"
+          fill="none"
+          stroke="#0878f9"
+          strokeOpacity="0.18"
+          strokeWidth="1.4"
+        />
+        <g fill="#0878f9" opacity="0.18">
+          <circle cx="390" cy="310" r="4" />
+          <circle cx="718" cy="250" r="4" />
+          <circle cx="1142" cy="284" r="4" />
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+function ClaimTimeline({ reducedMotion }: { reducedMotion: boolean }) {
+  return (
+    <div>
+      <motion.div
+        initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-20%" }}
+        className="border-y border-[rgb(8_23_45_/_12%)] py-5"
+      >
+        <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-[rgb(8_23_45_/_42%)]">
+          <FileText className="h-4 w-4" />
+          Incoming information
+        </div>
+        <p className="max-w-2xl text-base leading-7 text-[rgb(8_23_45_/_72%)]">
+          The Hong Kong Observatory has issued a Black Rainstorm Warning. All schools will suspend
+          classes tomorrow, and major roads in Kowloon are expected to close.
+        </p>
+      </motion.div>
+
+      <div className="relative mt-10 pl-8">
+        <motion.div
+          initial={reducedMotion ? false : { scaleY: 0 }}
+          whileInView={{ scaleY: 1 }}
+          viewport={{ once: true, margin: "-20%" }}
+          transition={{ duration: 0.55, ease: "easeOut" }}
+          className="absolute left-[7px] top-2 h-[calc(100%-16px)] w-px origin-top bg-[rgb(8_23_45_/_14%)]"
+        />
+        {claims.map((claim, index) => (
+          <motion.div
+            key={claim}
+            initial={reducedMotion ? false : { opacity: 0, y: 14 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-20%" }}
+            transition={{ delay: 0.12 + index * 0.1 }}
+            className="relative pb-10 last:pb-0"
+          >
+            <span className="absolute -left-8 top-1 h-3.5 w-3.5 rounded-full border border-[#0878f9] bg-white shadow-[0_0_0_4px_rgba(8,120,249,0.06)]" />
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(8_23_45_/_42%)]">
+              Claim {String(index + 1).padStart(2, "0")}
+            </div>
+            <p className="mt-2 max-w-2xl text-lg leading-8 text-[rgb(8_23_45_/_84%)]">{claim}</p>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EvidenceNetwork({ reducedMotion }: { reducedMotion: boolean }) {
+  return (
+    <div className="mt-14">
+      <div className="grid gap-8 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] md:items-center">
+        {sources.map((source, index) => (
+          <div key={source.name} className="contents">
+            <motion.div
+              initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.08 }}
+              className="text-center"
+            >
+              <div className="mx-auto grid h-14 w-14 place-items-center rounded-full border border-[rgb(8_23_45_/_14%)] bg-white">
+                <source.icon className="h-5 w-5 text-[#0878f9]" />
+              </div>
+              <div className="mt-4 text-sm font-semibold text-[rgb(8_23_45_/_86%)]">{source.name}</div>
+              <div className="mt-1 text-xs text-[rgb(8_23_45_/_48%)]">{source.label}</div>
+              <div className="mt-2 text-[11px] uppercase tracking-[0.16em] text-[rgb(8_23_45_/_42%)]">
+                {source.status}
+              </div>
+            </motion.div>
+            {index < sources.length - 1 && (
+              <motion.div
+                initial={reducedMotion ? false : { scaleX: 0 }}
+                whileInView={{ scaleX: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.18 + index * 0.08, duration: 0.35 }}
+                className="hidden h-px w-20 origin-left bg-[rgb(8_23_45_/_14%)] md:block"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StoryCopy({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="max-w-xl">
+      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[rgb(8_23_45_/_42%)]">
+        {eyebrow}
+      </div>
+      <h2 className="mt-3 text-4xl font-semibold leading-tight text-[rgb(8_23_45_/_88%)] md:text-5xl">
+        {title}
+      </h2>
+      <p className="mt-5 text-base leading-7 text-[rgb(8_23_45_/_58%)]">{children}</p>
+    </div>
+  );
+}

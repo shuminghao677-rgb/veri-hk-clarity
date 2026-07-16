@@ -1,7 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { BadgeCheck, ExternalLink, Landmark } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { ExternalLink, Landmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { officialSources } from "@/lib/mock-data";
 import { SourceIcon } from "@/components/verihk/SourceIcon";
@@ -10,10 +8,7 @@ export const Route = createFileRoute("/_app/sources")({
   head: () => ({
     meta: [
       { title: "Official Sources — VeriHK" },
-      {
-        name: "description",
-        content: "Every trusted Hong Kong government source VeriHK verifies against.",
-      },
+      { name: "description", content: "Official Hong Kong sources used by VeriHK." },
       { property: "og:title", content: "Official Sources — VeriHK" },
     ],
   }),
@@ -22,53 +17,51 @@ export const Route = createFileRoute("/_app/sources")({
 
 function SourcesPage() {
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 md:px-8 md:py-14">
-      <div className="mb-10 max-w-2xl">
-        <div className="inline-flex items-center gap-2 rounded-full border bg-background/60 px-3 py-1 text-[11px] font-medium text-muted-foreground">
-          <Landmark className="h-3 w-3 text-primary" /> Up-to-date official sources
+    <div className="premium-container py-10 md:py-16">
+      <div className="mb-12 max-w-3xl">
+        <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[rgb(8_23_45_/_42%)]">
+          <Landmark className="h-3.5 w-3.5" />
+          Official source graph
         </div>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">Official Sources</h1>
-        <p className="mt-2 text-muted-foreground">
-          Every claim is cross-checked against these HKSAR government data providers. Names and
-          logos are used for identification only — VeriHK is not affiliated with any department.
+        <h1 className="mt-5 text-4xl font-semibold tracking-normal text-[rgb(8_23_45_/_90%)] md:text-6xl">
+          The trusted layer underneath every report.
+        </h1>
+        <p className="mt-4 text-base leading-7 text-[rgb(8_23_45_/_58%)]">
+          VeriHK uses official government endpoints and feeds where available. The verification
+          engine decides how each source contributes to the report.
         </p>
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-        {officialSources.map((s) => (
-          <Card
-            key={s.key}
-            className="group flex h-full flex-col rounded-3xl border-border/60 p-6 shadow-soft transition-all hover:-translate-y-1 hover:shadow-elegant"
+      <div className="border-y border-[rgb(8_23_45_/_12%)]">
+        <div className="hidden grid-cols-[1.1fr_0.7fr_1.4fr_auto] gap-6 border-b border-[rgb(8_23_45_/_10%)] py-3 text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(8_23_45_/_42%)] md:grid">
+          <div>Source</div>
+          <div>Type</div>
+          <div>Use</div>
+          <div>Status</div>
+        </div>
+        {officialSources.map((source) => (
+          <div
+            key={source.key}
+            className="grid gap-4 border-b border-[rgb(8_23_45_/_10%)] py-5 last:border-b-0 md:grid-cols-[1.1fr_0.7fr_1.4fr_auto] md:items-center md:gap-6"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="grid h-12 w-12 place-items-center rounded-2xl border border-border/70 bg-muted/60 text-foreground/80">
-                <SourceIcon sourceKey={s.key} className="h-5 w-5" />
-              </div>
-              <Badge
-                variant="outline"
-                className="gap-1 rounded-full border-success/30 bg-success/10 text-success"
-              >
-                <BadgeCheck className="h-3 w-3" /> Official
-              </Badge>
-            </div>
-            <div className="mt-5 space-y-1">
-              <div className="text-base font-semibold">{s.name}</div>
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                {s.type}
+            <div className="flex items-center gap-3">
+              <span className="grid h-9 w-9 place-items-center rounded-xl border border-[rgb(8_23_45_/_12%)] bg-white">
+                <SourceIcon sourceKey={source.key} className="h-4 w-4" />
+              </span>
+              <div>
+                <div className="text-sm font-semibold text-[rgb(8_23_45_/_86%)]">{source.name}</div>
+                <div className="text-xs text-[rgb(8_23_45_/_42%)]">Updated {source.updated}</div>
               </div>
             </div>
-            <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground">
-              {s.description}
-            </p>
-            <div className="mt-5 flex items-center justify-between gap-3 border-t pt-4">
-              <div className="text-[11px] text-muted-foreground">Updated: {s.updated}</div>
-              <Button asChild size="sm" variant="outline" className="rounded-full">
-                <a href={s.url} target="_blank" rel="noreferrer">
-                  Visit <ExternalLink className="ml-1.5 h-3 w-3" />
-                </a>
-              </Button>
-            </div>
-          </Card>
+            <div className="text-sm text-[rgb(8_23_45_/_58%)]">{source.type}</div>
+            <div className="text-sm leading-6 text-[rgb(8_23_45_/_62%)]">{source.description}</div>
+            <Button asChild size="sm" variant="outline" className="h-9 rounded-xl justify-self-start md:justify-self-end">
+              <a href={source.url} target="_blank" rel="noreferrer">
+                Open
+                <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+              </a>
+            </Button>
+          </div>
         ))}
       </div>
     </div>

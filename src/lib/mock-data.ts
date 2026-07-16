@@ -1,7 +1,11 @@
 export type ClaimStatus = "supported" | "refuted" | "insufficient";
 
 export type EvidenceType =
-  "Official structured data" | "Government announcement" | "RSS notice" | "Supporting evidence";
+  | "Official structured data"
+  | "Official Weather API"
+  | "Government announcement"
+  | "RSS notice"
+  | "Supporting evidence";
 
 export type SourceKey = "hko" | "td" | "edb" | "govnews" | "datagov" | "dsd";
 

@@ -13,6 +13,10 @@ import {
 } from "@/lib/live-sources";
 
 const DEFAULT_AI_MODEL = "gemini-3.5-flash";
+const GEMINI_MAX_ATTEMPTS = 4;
+const GEMINI_RETRY_DELAYS_MS = [1000, 2000, 4000] as const;
+const GEMINI_ATTEMPT_TIMEOUT_MS = Number(process.env.GEMINI_ATTEMPT_TIMEOUT_MS || 35_000);
+const TRANSIENT_GEMINI_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
 type RawModelClaim = {
   id?: unknown;
@@ -60,10 +64,18 @@ type GeminiNoTextReason =
   | "empty_model_output"
   | "unknown_finish_reason";
 
+type GeminiRequestOptions = {
+  fetchFn?: typeof fetch;
+  sleepFn?: (ms: number) => Promise<void>;
+  randomFn?: () => number;
+  attemptTimeoutMs?: number;
+};
+
 export class AnalysisError extends Error {
   constructor(
     message: string,
     public readonly statusCode = 500,
+    public readonly code?: string,
   ) {
     super(message);
     this.name = "AnalysisError";
@@ -153,22 +165,214 @@ function assembleReport(
 }
 
 async function requestPreliminaryAnalysis(text: string): Promise<RawModelReport> {
+  return requestPreliminaryAnalysisWithRetry(text);
+}
+
+export async function requestPreliminaryAnalysisForTest(
+  text: string,
+  options: GeminiRequestOptions = {},
+): Promise<RawModelReport> {
+  return requestPreliminaryAnalysisWithRetry(text, options);
+}
+
+async function requestPreliminaryAnalysisWithRetry(
+  text: string,
+  options: GeminiRequestOptions = {},
+): Promise<RawModelReport> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new AnalysisError("GEMINI_API_KEY is not configured on the server.");
+    throw new AnalysisError(
+      "GEMINI_API_KEY is not configured on the server.",
+      500,
+      "missing_api_key",
+    );
   }
 
-  const model = process.env.AI_MODEL || DEFAULT_AI_MODEL;
+  const fallbackModel = process.env.AI_FALLBACK_MODEL?.trim();
+  const primaryModel = process.env.AI_MODEL || DEFAULT_AI_MODEL;
+  const hasFallbackModel = Boolean(fallbackModel && fallbackModel !== primaryModel);
+  const primaryMaxAttempts = hasFallbackModel ? GEMINI_MAX_ATTEMPTS - 1 : GEMINI_MAX_ATTEMPTS;
+  const primary = await requestGeminiModelWithRetry(
+    text,
+    primaryModel,
+    apiKey,
+    options,
+    primaryMaxAttempts,
+  );
+  if (primary.ok === true) return primary.report;
+  const primaryError = primary;
+
+  if (primaryError.transientExhausted && fallbackModel && fallbackModel !== primaryModel) {
+    const waitMs = getRetryDelayMs(primaryMaxAttempts, primaryError.retryAfterHeader, options.randomFn);
+    logGeminiRetryDiagnostics({
+      model: fallbackModel,
+      attempt: 1,
+      status: null,
+      waitMs,
+      elapsedMs: 0,
+      message: "Trying configured fallback Gemini model after primary transient retries.",
+    });
+    await (options.sleepFn ?? sleep)(waitMs);
+    const fallback = await requestGeminiModelWithRetry(text, fallbackModel, apiKey, options, 1);
+    if (fallback.ok === true) return fallback.report;
+    throw fallback.error;
+  }
+
+  throw primaryError.error;
+}
+
+async function requestGeminiModelWithRetry(
+  text: string,
+  model: string,
+  apiKey: string,
+  options: GeminiRequestOptions,
+  maxAttempts: number,
+): Promise<
+  | { ok: true; report: RawModelReport }
+  | { ok: false; error: AnalysisError; transientExhausted: boolean; retryAfterHeader: string | null }
+> {
+  let lastError: AnalysisError | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const startedAt = Date.now();
+    const result = await requestGeminiModelOnce(text, model, apiKey, options);
+    const elapsedMs = Date.now() - startedAt;
+    if (result.ok === true) return result;
+    const failed = result;
+
+    lastError = failed.error;
+    const retryable = isTransientStatus(failed.error.statusCode);
+    const hasAttemptsLeft = attempt < maxAttempts;
+
+    if (!retryable || !hasAttemptsLeft) {
+      logGeminiRetryDiagnostics({
+        model,
+        attempt,
+        status: failed.error.statusCode,
+        waitMs: 0,
+        elapsedMs,
+        message: `Final Gemini failure: ${failed.error.code ?? failed.error.message}`,
+      });
+      return {
+        ok: false,
+        error:
+          retryable && !hasAttemptsLeft
+            ? new AnalysisError(
+                "The AI service is temporarily busy. Please retry in a moment.",
+                503,
+                "gemini_transient_exhausted",
+              )
+            : failed.error,
+        transientExhausted: retryable && !hasAttemptsLeft,
+        retryAfterHeader: failed.retryAfterHeader,
+      };
+    }
+
+    const waitMs = getRetryDelayMs(attempt, failed.retryAfterHeader, options.randomFn);
+    logGeminiRetryDiagnostics({
+      model,
+      attempt,
+      status: failed.error.statusCode,
+      waitMs,
+      elapsedMs,
+      message: "Transient Gemini error; retrying.",
+    });
+    await (options.sleepFn ?? sleep)(waitMs);
+  }
+
+  return {
+    ok: false,
+    error:
+      lastError ??
+      new AnalysisError(
+        "The AI service is temporarily busy. Please retry in a moment.",
+        503,
+        "gemini_transient_exhausted",
+      ),
+    transientExhausted: true,
+    retryAfterHeader: null,
+  };
+}
+
+async function requestGeminiModelOnce(
+  text: string,
+  model: string,
+  apiKey: string,
+  options: GeminiRequestOptions,
+): Promise<
+  | { ok: true; report: RawModelReport }
+  | { ok: false; error: AnalysisError; retryAfterHeader: string | null }
+> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model,
   )}:generateContent`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-goog-api-key": apiKey,
-    },
-    body: JSON.stringify({
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    options.attemptTimeoutMs ?? GEMINI_ATTEMPT_TIMEOUT_MS,
+  );
+
+  let response: Response;
+  try {
+    response = await (options.fetchFn ?? fetch)(endpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      signal: controller.signal,
+      body: JSON.stringify(buildGeminiRequestBody(text)),
+    });
+  } catch (error) {
+    const timedOut = isAbortError(error);
+    return {
+      ok: false,
+      error: new AnalysisError(
+        timedOut
+          ? "Gemini request timed out. Please retry in a moment."
+          : "Gemini request failed before a response was received.",
+        timedOut ? 504 : 503,
+        timedOut ? "gemini_timeout" : "gemini_network_error",
+      ),
+      retryAfterHeader: null,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const retryAfterHeader = response.headers.get("retry-after");
+  const payload = (await response.json().catch(() => null)) as GeminiGenerateContentResponse | null;
+
+  if (!response.ok) {
+    logGeminiDiagnostics(response.status, payload);
+    const message = getGeminiErrorMessage(payload);
+    return {
+      ok: false,
+      error: new AnalysisError(
+        `Gemini request failed (${response.status}): ${message}`,
+        response.status,
+        `gemini_http_${response.status}`,
+      ),
+      retryAfterHeader,
+    };
+  }
+
+  try {
+    return { ok: true, report: parseGeminiPayload(payload, response.status) };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof AnalysisError
+          ? error
+          : new AnalysisError("malformed_response: Gemini returned invalid JSON."),
+      retryAfterHeader,
+    };
+  }
+}
+
+function buildGeminiRequestBody(text: string): Record<string, unknown> {
+  return {
       contents: [
         {
           role: "user",
@@ -240,28 +444,21 @@ async function requestPreliminaryAnalysis(text: string): Promise<RawModelReport>
           },
         },
       },
-    }),
-  });
+    };
+}
 
-  const payload = (await response.json().catch(() => null)) as GeminiGenerateContentResponse | null;
-
-  if (!response.ok) {
-    logGeminiDiagnostics(response.status, payload);
-    const message = getGeminiErrorMessage(payload);
-    throw new AnalysisError(
-      `Gemini request failed (${response.status}): ${message}`,
-      response.status,
-    );
-  }
-
+function parseGeminiPayload(
+  payload: GeminiGenerateContentResponse | null,
+  status: number,
+): RawModelReport {
   if (!payload) {
-    logGeminiDiagnostics(response.status, payload);
+    logGeminiDiagnostics(status, payload);
     throw new AnalysisError("malformed_response: Gemini returned a non-JSON response.");
   }
 
   const content = extractGeminiText(payload);
   if (!content) {
-    logGeminiDiagnostics(response.status, payload);
+    logGeminiDiagnostics(status, payload);
     const reason = classifyNoTextGeminiResponse(payload);
     throw new AnalysisError(`${reason}: Gemini did not return a usable text response.`);
   }
@@ -269,13 +466,13 @@ async function requestPreliminaryAnalysis(text: string): Promise<RawModelReport>
   try {
     const parsed = JSON.parse(content) as RawModelReport;
     if (!isRawModelReport(parsed)) {
-      logGeminiDiagnostics(response.status, payload);
+      logGeminiDiagnostics(status, payload);
       throw new AnalysisError("malformed_response: Gemini returned JSON with an unexpected shape.");
     }
     return parsed;
   } catch (error) {
     if (error instanceof AnalysisError) throw error;
-    logGeminiDiagnostics(response.status, payload);
+    logGeminiDiagnostics(status, payload);
     console.error("Gemini JSON parse failed", error);
     throw new AnalysisError("malformed_response: Gemini returned invalid JSON.");
   }
@@ -339,6 +536,66 @@ function logGeminiDiagnostics(status: number, payload: GeminiGenerateContentResp
     errorStatus: payload?.error?.status ?? null,
     errorMessage: payload?.error?.message ?? null,
   });
+}
+
+function logGeminiRetryDiagnostics({
+  model,
+  attempt,
+  status,
+  waitMs,
+  elapsedMs,
+  message,
+}: {
+  model: string;
+  attempt: number;
+  status: number | null;
+  waitMs: number;
+  elapsedMs: number;
+  message: string;
+}): void {
+  if (process.env.GEMINI_DEBUG !== "true") return;
+  console.info("Gemini retry diagnostic", {
+    model,
+    attempt,
+    status,
+    waitMs,
+    elapsedMs,
+    message,
+  });
+}
+
+function isTransientStatus(status: number): boolean {
+  return TRANSIENT_GEMINI_STATUSES.has(status);
+}
+
+function getRetryDelayMs(
+  attempt: number,
+  retryAfterHeader: string | null,
+  randomFn: (() => number) | undefined,
+): number {
+  const retryAfterMs = parseRetryAfterMs(retryAfterHeader);
+  const baseMs = retryAfterMs ?? GEMINI_RETRY_DELAYS_MS[attempt - 1] ?? 4000;
+  const random = randomFn ?? Math.random;
+  const jitterMultiplier = 0.8 + random() * 0.4;
+  return Math.max(0, Math.round(baseMs * jitterMultiplier));
+}
+
+function parseRetryAfterMs(value: string | null): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+
+  const dateMs = Date.parse(value);
+  if (Number.isNaN(dateMs)) return null;
+  return Math.max(0, dateMs - Date.now());
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function getGeminiPartTypes(part: GeminiPart): string[] {

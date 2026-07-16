@@ -10,7 +10,13 @@ export interface PhaseOneEvidence {
   source_key: OfficialSourceKey;
   source_name: string;
   source_authority?: "official";
-  source_type: "hko_warning" | "rss_item" | "live_page" | "official_api";
+  source_type:
+    | "hko_warning"
+    | "rss_item"
+    | "live_page"
+    | "official_api"
+    | "government_rss"
+    | "government_webpage";
   category?: string;
   relevance_score?: number;
   title: string;
@@ -21,6 +27,35 @@ export interface PhaseOneEvidence {
   updated_at: string | null;
   retrieved_at: string;
   freshness: SourceFreshness;
+  traffic_metadata?: TrafficEvidenceMetadata;
+}
+
+export interface TrafficEvidenceMetadata {
+  road_name?: string;
+  nearby_landmark?: string;
+  district?: string;
+  direction?: string;
+  event_type?: string;
+  scope?: string;
+  current_status?: string;
+  transport_mode?: "MTR" | "bus" | "minibus" | "ferry" | "tram" | "unknown";
+  route_or_line?: string;
+  station_or_stop?: string;
+  service_status?:
+    | "disrupted"
+    | "suspended"
+    | "delayed"
+    | "adjusted"
+    | "cancelled"
+    | "resumed"
+    | "resuming"
+    | "normal"
+    | "unknown";
+  cause?: string;
+  latitude?: number;
+  longitude?: number;
+  coordinate_source?: "Official TD coordinates";
+  map_location_key?: string;
 }
 
 export interface PhaseOneClaim {
@@ -52,6 +87,8 @@ export interface PhaseOneReport {
     official_sources_queried: number;
     feed_items_fetched: number;
     relevant_evidence_attached: number;
+    unique_relevant_evidence_records?: number;
+    claim_evidence_links?: number;
   };
   claims: PhaseOneClaim[];
 }
@@ -102,7 +139,14 @@ function isPhaseOneEvidence(value: unknown): value is PhaseOneEvidence {
   if (!["hko", "td", "edb", "govnews"].includes(String(value.source_key))) return false;
   if (typeof value.source_name !== "string" || value.source_name.trim() === "") return false;
   if (
-    !["hko_warning", "rss_item", "live_page", "official_api"].includes(String(value.source_type))
+    ![
+      "hko_warning",
+      "rss_item",
+      "live_page",
+      "official_api",
+      "government_rss",
+      "government_webpage",
+    ].includes(String(value.source_type))
   ) {
     return false;
   }
@@ -117,12 +161,77 @@ function isPhaseOneEvidence(value: unknown): value is PhaseOneEvidence {
   if (typeof value.title !== "string") return false;
   if (typeof value.summary !== "string") return false;
   if (typeof value.url !== "string") return false;
+  if (value.traffic_metadata !== undefined && !isTrafficEvidenceMetadata(value.traffic_metadata)) {
+    return false;
+  }
   if (value.published_at !== null && typeof value.published_at !== "string") return false;
   if (value.updated_at !== null && typeof value.updated_at !== "string") return false;
   if (typeof value.retrieved_at !== "string" || Number.isNaN(Date.parse(value.retrieved_at))) {
     return false;
   }
   return ["fresh", "stale", "unavailable"].includes(String(value.freshness));
+}
+
+function isTrafficEvidenceMetadata(value: unknown): value is TrafficEvidenceMetadata {
+  if (!isRecord(value)) return false;
+  const keys: Array<keyof TrafficEvidenceMetadata> = [
+    "road_name",
+    "nearby_landmark",
+    "district",
+    "direction",
+    "event_type",
+    "scope",
+    "current_status",
+    "transport_mode",
+    "route_or_line",
+    "station_or_stop",
+    "service_status",
+    "cause",
+    "coordinate_source",
+    "map_location_key",
+  ];
+  const stringsValid = keys.every((key) => {
+    if (key === "coordinate_source") {
+      return value[key] === undefined || value[key] === "Official TD coordinates";
+    }
+    if (key === "transport_mode") {
+      return (
+        value[key] === undefined ||
+        ["MTR", "bus", "minibus", "ferry", "tram", "unknown"].includes(String(value[key]))
+      );
+    }
+    if (key === "service_status") {
+      return (
+        value[key] === undefined ||
+        [
+          "disrupted",
+          "suspended",
+          "delayed",
+          "adjusted",
+          "cancelled",
+          "resumed",
+          "resuming",
+          "normal",
+          "unknown",
+        ].includes(String(value[key]))
+      );
+    }
+    return value[key] === undefined || typeof value[key] === "string";
+  });
+  const latitudeValid =
+    value.latitude === undefined ||
+    (typeof value.latitude === "number" &&
+      Number.isFinite(value.latitude) &&
+      value.latitude >= -90 &&
+      value.latitude <= 90);
+  const longitudeValid =
+    value.longitude === undefined ||
+    (typeof value.longitude === "number" &&
+      Number.isFinite(value.longitude) &&
+      value.longitude >= -180 &&
+      value.longitude <= 180);
+  const notNullIsland = !(value.latitude === 0 && value.longitude === 0);
+  return stringsValid && latitudeValid && longitudeValid && notNullIsland;
 }
 
 function isConfidence(value: unknown): value is number {

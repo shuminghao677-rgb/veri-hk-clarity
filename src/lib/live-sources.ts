@@ -6,6 +6,11 @@ import type {
   ReportVerdict,
   SourceFreshness,
 } from "./report-contract";
+import {
+  evaluateTrafficClaimWithSources,
+  retrieveTrafficEvidence,
+  type TrafficSourceSnapshot,
+} from "./traffic-sources";
 
 const HKO_WEATHER_BASE = "https://data.weather.gov.hk/weatherAPI/opendata/weather.php";
 const HKO_WARNINGS_PAGE = "https://www.hko.gov.hk/en/wxinfo/currwx/warning.htm";
@@ -105,6 +110,14 @@ export type ClaimCategory =
   | WeatherClaimCategory
   | "education_suspension"
   | "traffic_road_closure"
+  | "public_transport_disruption"
+  | "public_transport_service_normal"
+  | "public_transport_delay"
+  | "public_transport_suspension"
+  | "public_transport_cancellation"
+  | "public_transport_adjustment"
+  | "public_transport_resumed"
+  | "public_transport_cause_claim"
   | "general_government"
   | "unsupported_category";
 
@@ -118,7 +131,7 @@ type CacheEntry<T> = {
 export type SourceBundle = {
   hko?: HkoBundle;
   rss?: SourceSnapshot;
-  td?: SourceSnapshot;
+  td?: SourceSnapshot | TrafficSourceSnapshot;
 };
 
 export type HkoBundle = Partial<Record<HkoWeatherDataType, SourceSnapshot>>;
@@ -136,11 +149,13 @@ export type EvidenceRetrievalResult = {
   claims: PhaseOneClaim[];
   freshness: SourceFreshnessSummary[];
   coverage: EvidenceCoverage;
-  counts: {
-    official_sources_queried: number;
-    feed_items_fetched: number;
-    relevant_evidence_attached: number;
-  };
+    counts: {
+      official_sources_queried: number;
+      feed_items_fetched: number;
+      relevant_evidence_attached: number;
+      unique_relevant_evidence_records?: number;
+      claim_evidence_links?: number;
+    };
 };
 
 export type SourceFreshnessSummary = {
@@ -186,7 +201,7 @@ export async function retrieveLiveEvidence(
   const [initialHko, rss, td] = await Promise.all([
     fetchHkoBundle(routes.hko),
     routes.rss ? getCachedRssItems() : Promise.resolve(undefined),
-    routes.td ? fetchTransportSpecialNews() : Promise.resolve(undefined),
+    routes.td ? retrieveTrafficEvidence(claims) : Promise.resolve(undefined),
   ]);
   const detailRoutes = getRequiredHkoDetailRoutes(claims, initialHko);
   const hkoDetails = await fetchHkoBundle(detailRoutes);
@@ -201,6 +216,7 @@ export function evaluateClaimsWithSources(
 ): EvidenceRetrievalResult {
   const evaluatedClaims = claims.map((claim) => evaluateClaimWithSources(claim, sources));
   const attachedCount = evaluatedClaims.reduce((sum, claim) => sum + claim.evidence.length, 0);
+  const uniqueAttachedCount = countUniqueEvidenceRecords(evaluatedClaims.flatMap((claim) => claim.evidence));
   const snapshots = flattenSnapshots(sources);
 
   return {
@@ -213,9 +229,19 @@ export function evaluateClaimsWithSources(
         0,
       ),
       feed_items_fetched: snapshots.reduce((sum, snapshot) => sum + snapshot.itemsFetched, 0),
-      relevant_evidence_attached: attachedCount,
+      relevant_evidence_attached: uniqueAttachedCount,
+      unique_relevant_evidence_records: uniqueAttachedCount,
+      claim_evidence_links: attachedCount,
     },
   };
+}
+
+function countUniqueEvidenceRecords(evidence: PhaseOneEvidence[]): number {
+  return new Set(
+    evidence.map((item) =>
+      [item.source_key, item.id, item.url, item.updated_at ?? "", item.title].join("|"),
+    ),
+  ).size;
 }
 
 function getRequiredRoutes(claims: PhaseOneClaim[]): {
@@ -246,7 +272,7 @@ function getRequiredRoutes(claims: PhaseOneClaim[]): {
       hko.add("rhrread");
     } else if (category === "education_suspension") {
       rss = true;
-    } else if (category === "traffic_road_closure") {
+    } else if (isTransportDepartmentClaimCategory(category)) {
       td = true;
     }
   }
@@ -318,8 +344,8 @@ function evaluateClaimWithSources(claim: PhaseOneClaim, sources: SourceBundle): 
       sources.rss ?? emptySnapshot("govnews", "Government News"),
     );
   }
-  if (category === "traffic_road_closure") {
-    return evaluateTrafficClaim(claim, sources.td ?? emptySnapshot("td", "Transport Department"));
+  if (isTransportDepartmentClaimCategory(category)) {
+    return evaluateTrafficClaimWithSources(claim, sources.td);
   }
 
   return withVerdict(
@@ -343,11 +369,18 @@ export function classifyClaim(text: string): ClaimCategory {
   ) {
     return "education_suspension";
   }
-  if (/(road|lane|traffic|closure|closed|diversion|kowloon|tunnel|highway)/.test(normalized)) {
+  const publicTransportCategory = classifyPublicTransportClaim(normalized);
+  if (publicTransportCategory) return publicTransportCategory;
+  if (
+    /(road|rd|street|lane|traffic|closure|closed|diversion|kowloon|tunnel|highway|bus|mtr|tram|ferry|route|public transport|congest|busy|reopen)/.test(
+      normalized,
+    )
+  ) {
     return "traffic_road_closure";
   }
 
   const weatherLike =
+    !hasPublicTransportWeatherGuard(normalized) &&
     /(weather|rain|rainstorm|typhoon|cyclone|monsoon|thunderstorm|observatory|hko|temperature|degrees|forecast|visibility|lightning|wind|humidity|hot|cold)/.test(
       normalized,
     );
@@ -380,6 +413,61 @@ export function classifyClaim(text: string): ClaimCategory {
     return "current_weather_observation";
   }
   return "weather_general";
+}
+
+function classifyPublicTransportClaim(normalized: string): ClaimCategory | null {
+  if (!isPublicTransportLike(normalized)) return null;
+  if (/(caused by|cause is|due to|because of|technical fault|train fault)/.test(normalized)) {
+    return "public_transport_cause_claim";
+  }
+  if (/(operating normally|normal service|services are normal|running normally)/.test(normalized)) {
+    return "public_transport_service_normal";
+  }
+  if (/(resumed|service has resumed|traffic has resumed)/.test(normalized)) {
+    return "public_transport_resumed";
+  }
+  if (/(suspend|suspension|suspended)/.test(normalized)) return "public_transport_suspension";
+  if (/(cancel|cancelled|canceled|cancellation)/.test(normalized)) {
+    return "public_transport_cancellation";
+  }
+  if (/(delay|delayed)/.test(normalized)) return "public_transport_delay";
+  if (/(adjust|adjusted|temporary|divert|diverted)/.test(normalized)) {
+    return "public_transport_adjustment";
+  }
+  if (/(disrupt|disruption|service disruption|service affected|service).*/.test(normalized)) {
+    return "public_transport_disruption";
+  }
+  return null;
+}
+
+function isPublicTransportLike(normalized: string): boolean {
+  return (
+    /(mtr|railway|metro|train|station|service disruption|technical fault|ferry|bus|tram|minibus|public transport)/.test(
+      normalized,
+    ) ||
+    /\bdisruption\b.*\b(caused by|cause|technical fault)\b/.test(normalized) ||
+    /\b[a-z0-9]+(?:\s+[a-z0-9]+){0,5}\s+line\b/.test(normalized)
+  );
+}
+
+function hasPublicTransportWeatherGuard(normalized: string): boolean {
+  return /(train|railway|mtr|metro|station|service disruption|technical fault|ferry|bus|tram|minibus)/.test(
+    normalized,
+  );
+}
+
+function isTransportDepartmentClaimCategory(category: ClaimCategory): boolean {
+  return (
+    category === "traffic_road_closure" ||
+    category === "public_transport_disruption" ||
+    category === "public_transport_service_normal" ||
+    category === "public_transport_delay" ||
+    category === "public_transport_suspension" ||
+    category === "public_transport_cancellation" ||
+    category === "public_transport_adjustment" ||
+    category === "public_transport_resumed" ||
+    category === "public_transport_cause_claim"
+  );
 }
 
 function evaluateActiveWeatherWarningClaim(claim: PhaseOneClaim, hko: HkoBundle): EvaluatedClaim {
@@ -422,8 +510,8 @@ function evaluateActiveWeatherWarningClaim(claim: PhaseOneClaim, hko: HkoBundle)
       "supported",
       evidence,
       0.94,
-      `HKO current weather warning summary lists ${claimedWarning.displayName} as active.`,
-      "Treat this warning claim as supported by the live HKO warning summary. Recheck HKO if conditions are changing.",
+      `The Hong Kong Observatory Warning Summary currently lists an active ${claimedWarning.displayName}.`,
+      "Continue monitoring the Hong Kong Observatory for any warning updates if weather conditions change.",
       "high",
     );
   }
@@ -442,8 +530,8 @@ function evaluateActiveWeatherWarningClaim(claim: PhaseOneClaim, hko: HkoBundle)
     "refuted",
     [negativeEvidence],
     0.9,
-    `HKO current weather warning summary responded successfully, but ${claimedWarning.displayName} is not active.`,
-    "Treat this warning claim as refuted for the current HKO warning snapshot. Recheck HKO if conditions are changing.",
+    `The Hong Kong Observatory Warning Summary does not currently include an active ${claimedWarning.displayName}.`,
+    "Continue monitoring the Hong Kong Observatory for any warning updates if weather conditions change.",
     "high",
   );
 }

@@ -63,17 +63,19 @@ function VerifyPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-10 md:px-8 md:py-14">
-      <div className="mb-8 flex flex-col gap-2">
-        <div className="inline-flex w-fit items-center gap-2 rounded-full border bg-background/60 px-3 py-1 text-[11px] font-medium text-muted-foreground">
-          <Sparkles className="h-3 w-3 text-primary" /> New verification
+    <div className="premium-container py-10 md:py-16">
+      <div className="mb-10 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
+        <div>
+          <div className="inline-flex w-fit items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
+            <Sparkles className="h-3.5 w-3.5 text-foreground" /> Verification workspace
+          </div>
+          <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-tight tracking-normal md:text-6xl">
+            Turn a message into an evidence network.
+          </h1>
         </div>
-        <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">
-          What would you like to verify?
-        </h1>
-        <p className="text-muted-foreground">
-          Paste text, drop a screenshot, or upload a PDF. VeriHK extracts every factual claim and
-          cross-checks it against timely official Hong Kong sources.
+        <p className="max-w-xl text-base leading-7 text-muted-foreground lg:justify-self-end">
+          Paste the content you want checked. VeriHK will keep the same secure backend flow:
+          extract claims, query official sources, and build an explainable report.
         </p>
       </div>
 
@@ -82,9 +84,9 @@ function VerifyPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <Card className="glass overflow-hidden rounded-3xl border-border/60 p-6 shadow-elegant md:p-8">
+        <Card className="panel overflow-hidden rounded-[2rem] p-5 md:p-8">
           <Tabs defaultValue="text">
-            <TabsList className="grid w-full grid-cols-3 rounded-2xl bg-muted/60 p-1">
+            <TabsList className="grid w-full grid-cols-3 rounded-full bg-muted/70 p-1">
               <TabsTrigger value="text" className="rounded-xl gap-2">
                 <FileText className="h-4 w-4" /> Text
               </TabsTrigger>
@@ -101,7 +103,7 @@ function VerifyPage() {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="Paste news, claims or announcements..."
-                className="min-h-52 resize-none rounded-2xl border-border/70 bg-background/60 p-5 text-base leading-relaxed"
+                className="min-h-72 resize-none rounded-3xl border-border/70 bg-background/80 p-6 text-base leading-relaxed shadow-inner"
               />
               <p className="mt-2 text-xs text-muted-foreground">
                 {text.length} / {MAX_ANALYSIS_INPUT_CHARS.toLocaleString()} characters · English &
@@ -133,7 +135,7 @@ function VerifyPage() {
           <div className="mt-8 flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
-                Phase 1 generates preliminary AI analysis only. Official source checking comes next.
+                Live official-source checking runs on the server. Your API keys never enter the browser.
               </p>
               {error && (
                 <p className="inline-flex items-center gap-1.5 text-xs font-medium text-destructive">
@@ -145,9 +147,9 @@ function VerifyPage() {
             <Button
               size="lg"
               onClick={analyze}
-              className="rounded-full px-8 shadow-elegant sm:min-w-52"
+              className="rounded-full px-8 shadow-soft sm:min-w-52"
             >
-              Analyze
+              Start analysis
             </Button>
           </div>
         </Card>

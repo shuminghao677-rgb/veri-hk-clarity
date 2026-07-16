@@ -1,38 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  ScanSearch,
-  ShieldCheck,
-  XCircle,
-  Gauge,
-  
-  Sparkles,
-} from "lucide-react";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip as RTooltip,
-  CartesianGrid,
-} from "recharts";
-import { Card } from "@/components/ui/card";
+import { ArrowRight, Clock, FileCheck2, Gauge, ShieldCheck, Sparkles, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import {
-  distributionData,
-  sourceUsageData,
-  historyReports,
-} from "@/lib/mock-data";
+import { historyReports } from "@/lib/mock-data";
 
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({
     meta: [
       { title: "Dashboard — VeriHK" },
-      { name: "description", content: "Verification activity overview and quick access to VeriHK tools." },
+      { name: "description", content: "A calm overview of VeriHK verification activity." },
       { property: "og:title", content: "Dashboard — VeriHK" },
     ],
   }),
@@ -41,159 +18,113 @@ export const Route = createFileRoute("/_app/dashboard")({
 
 function Dashboard() {
   return (
-    <div className="mx-auto max-w-7xl px-4 py-10 md:px-8 md:py-12">
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div className="premium-container py-10 md:py-16">
+      <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border bg-background/60 px-3 py-1 text-[11px] font-medium text-muted-foreground">
-            <Sparkles className="h-3 w-3 text-primary" /> Overview
+          <div className="inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs text-muted-foreground">
+            <Sparkles className="h-3.5 w-3.5 text-foreground" />
+            Competition prototype
           </div>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-            Welcome back
+          <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-tight tracking-normal md:text-6xl">
+            Verification operations, without the noise.
           </h1>
-          <p className="mt-1 text-muted-foreground">
-            Here's your verification activity across official Hong Kong sources.
+          <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
+            A clean command center for recent reports, official-source coverage, and claim outcomes.
           </p>
         </div>
-        <Button asChild className="rounded-full shadow-elegant">
-          <Link to="/verify">New verification</Link>
+        <Button asChild size="lg" className="rounded-full px-6">
+          <Link to="/verify">
+            New verification
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Link>
         </Button>
       </div>
 
-      {/* KPIs */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Kpi icon={ScanSearch} label="Verifications" value="5" trend="+18%" />
-        <Kpi icon={ShieldCheck} label="Claims supported" value="12" trend="+9%" />
-        <Kpi icon={XCircle} label="Claims refuted" value="4" trend="-3%" />
-        <Kpi icon={Gauge} label="Avg. truth score" value="76%" trend="+1.2%" />
+      <div className="mt-12 grid gap-4 md:grid-cols-4">
+        <Metric icon={FileCheck2} label="Reports" value="5" />
+        <Metric icon={ShieldCheck} label="Supported" value="12" />
+        <Metric icon={XCircle} label="Refuted" value="4" />
+        <Metric icon={Gauge} label="Avg. confidence" value="76%" />
       </div>
 
-      {/* Charts */}
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1.4fr]">
-        <Card className="rounded-3xl border-border/60 p-6">
-          <div className="text-sm font-semibold">Verification distribution</div>
-          <div className="text-xs text-muted-foreground">This week</div>
-          <div className="mt-3 h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={distributionData}
-                  dataKey="value"
-                  innerRadius={55}
-                  outerRadius={90}
-                  paddingAngle={4}
-                  stroke="none"
-                >
-                  {distributionData.map((d, idx) => (
-                    <Cell key={idx} fill={d.color} />
-                  ))}
-                </Pie>
-                <RTooltip contentStyle={tooltipStyle} />
-              </PieChart>
-            </ResponsiveContainer>
+      <div className="mt-8 grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
+        <Card className="panel rounded-[2rem] p-6">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold tracking-normal">Recent verifications</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Reports opened from History currently use demo metadata.
+              </p>
+            </div>
+            <Button asChild variant="ghost" className="rounded-full">
+              <Link to="/history">View all</Link>
+            </Button>
           </div>
-          <div className="flex flex-wrap justify-center gap-3 text-xs">
-            {distributionData.map((d) => (
-              <span key={d.name} className="inline-flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: d.color }} />
-                {d.name}
-              </span>
+          <div className="divide-y">
+            {historyReports.slice(0, 4).map((report) => (
+              <Link
+                key={report.id}
+                to="/results"
+                className="flex flex-wrap items-center justify-between gap-4 py-4 transition-colors hover:text-primary"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5" />
+                    {report.date}
+                  </div>
+                  <div className="mt-1 truncate text-sm font-semibold">{report.title}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="rounded-full">
+                    {report.claims} claims
+                  </Badge>
+                  <Badge variant="outline" className="rounded-full">
+                    {report.confidence}% confidence
+                  </Badge>
+                </div>
+              </Link>
             ))}
           </div>
         </Card>
 
-        <Card className="rounded-3xl border-border/60 p-6">
-          <div className="text-sm font-semibold">Evidence sources</div>
-          <div className="text-xs text-muted-foreground">Most used across your reports</div>
-          <div className="mt-3 h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={sourceUsageData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="source" tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
-                <YAxis tick={{ fontSize: 11 }} stroke="var(--muted-foreground)" />
-                <RTooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="count" fill="var(--primary)" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      </div>
-
-      {/* Recent activity */}
-      <div className="mt-10">
-        <div className="mb-4 flex items-end justify-between">
-          <h2 className="text-xl font-semibold tracking-tight">Recent activity</h2>
-          <Button asChild variant="ghost" className="text-primary">
-            <Link to="/history">
-              View all
-            </Link>
-          </Button>
-        </div>
-        <Card className="rounded-3xl border-border/60 divide-y">
-          {historyReports.slice(0, 4).map((r) => (
-            <Link
-              key={r.id}
-              to="/results"
-              className="flex flex-wrap items-center justify-between gap-3 p-5 transition-colors hover:bg-muted/40"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  {r.date}
+        <Card className="panel rounded-[2rem] p-6">
+          <h2 className="text-xl font-semibold tracking-normal">Evidence posture</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            VeriHK is optimized for live official-source retrieval: current HKO warnings, Transport
+            Department incidents, public transport disruptions, and selected RSS notices.
+          </p>
+          <div className="mt-8 space-y-4">
+            {["Hong Kong Observatory", "Transport Department", "GovHK", "Education Bureau future"].map(
+              (source, index) => (
+                <div key={source}>
+                  <div className="flex justify-between text-sm">
+                    <span>{source}</span>
+                    <span className="text-muted-foreground">{index === 3 ? "planned" : "live"}</span>
+                  </div>
+                  <div className="mt-2 h-2 rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-foreground"
+                      style={{ width: `${index === 3 ? 38 : 82 - index * 8}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="mt-0.5 truncate text-sm font-semibold">{r.title}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary" className="rounded-full">
-                  {r.claims} claims
-                </Badge>
-                <Badge variant="outline" className="rounded-full border-success/30 bg-success/10 text-success">
-                  {r.confidence}% conf.
-                </Badge>
-              </div>
-            </Link>
-          ))}
+              ),
+            )}
+          </div>
         </Card>
       </div>
     </div>
   );
 }
 
-const tooltipStyle = {
-  background: "var(--card)",
-  border: "1px solid var(--border)",
-  borderRadius: 12,
-  fontSize: 12,
-} as const;
-
-function Kpi({
-  icon: Icon,
-  label,
-  value,
-  trend,
-}: {
-  icon: typeof ScanSearch;
-  label: string;
-  value: string;
-  trend: string;
-}) {
-  const up = trend.startsWith("+");
+function Metric({ icon: Icon, label, value }: { icon: typeof FileCheck2; label: string; value: string }) {
   return (
-    <Card className="rounded-3xl border-border/60 p-5 shadow-soft">
+    <Card className="panel rounded-3xl p-5">
       <div className="flex items-center justify-between">
-        <div className="text-xs font-medium text-muted-foreground">{label}</div>
-        <div className="grid h-8 w-8 place-items-center rounded-xl bg-primary/10 text-primary">
-          <Icon className="h-4 w-4" />
-        </div>
+        <span className="text-sm text-muted-foreground">{label}</span>
+        <Icon className="h-4 w-4 text-muted-foreground" />
       </div>
-      <div className="mt-3 flex items-baseline gap-2">
-        <div className="text-3xl font-semibold tracking-tight">{value}</div>
-        <span
-          className={`text-[11px] font-medium ${
-            up ? "text-success" : "text-destructive"
-          }`}
-        >
-          {trend}
-        </span>
-      </div>
+      <div className="mt-6 text-3xl font-semibold tracking-normal">{value}</div>
     </Card>
   );
 }

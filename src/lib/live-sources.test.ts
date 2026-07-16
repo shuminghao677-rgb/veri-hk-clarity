@@ -1,4 +1,5 @@
 import {
+  classifyClaim,
   evaluateClaimsWithSources,
   fndSnapshotFromPayload,
   flwSnapshotFromPayload,
@@ -12,6 +13,7 @@ import {
   type SourceBundle,
   type SourceSnapshot,
 } from "./live-sources";
+import { tdSnapshotFromXml as tdTrafficSnapshotFromXml } from "./traffic-sources";
 import {
   getEvidenceItemText,
   getHeaderReportLabels,
@@ -39,6 +41,10 @@ export async function runLiveSourceConnectorTests(): Promise<void> {
   testUnrelatedGovernmentNewsIsNotAttached();
   testSchoolSuspensionNoticeOnlyMatchesEducationClaim();
   testKowloonRoadClosureNoticeOnlyMatchesTrafficClaim();
+  testPublicTransportClaimsClassifyToTransport();
+  testPublicTransportSplitClaimsUseSameTdEvidence();
+  testPublicTransportResolvedUpdateRefutesActiveClaimAndLeavesCauseInsufficient();
+  await testPublicTransportOnlyRequestQueriesTdOnly();
 }
 
 async function testDeterministicRefutationQueriesOnlyWarnsum(): Promise<void> {
@@ -486,10 +492,192 @@ function testKowloonRoadClosureNoticeOnlyMatchesTrafficClaim(): void {
   );
   assertEqual(
     result.claims[1]?.evidence.length,
-    1,
-    "Kowloon road closure notice attaches to traffic claim",
+    0,
+    "generic Kowloon road closure claim does not attach one specific road notice",
   );
-  assertEqual(result.claims[1]?.evidence[0]?.source_key, "td", "traffic evidence uses TD only");
+}
+
+function testPublicTransportClaimsClassifyToTransport(): void {
+  assertEqual(
+    classifyClaim("The Tseung Kwan O Line is experiencing a service disruption near Yau Tong Station."),
+    "public_transport_disruption",
+    "MTR disruption claim is classified as public transport",
+  );
+  assertEqual(
+    classifyClaim("The Tseung Kwan O Line is operating normally near Yau Tong Station."),
+    "public_transport_service_normal",
+    "normal-service claim is classified as public transport",
+  );
+  assertEqual(
+    classifyClaim("The service disruption on the Tseung Kwan O Line is caused by a train technical fault."),
+    "public_transport_cause_claim",
+    "technical fault cause claim is classified as public transport",
+  );
+  assertEqual(
+    classifyClaim("The service disruption is caused by a train technical fault."),
+    "public_transport_cause_claim",
+    "train technical fault is not classified as weather",
+  );
+}
+
+function testPublicTransportSplitClaimsUseSameTdEvidence(): void {
+  const result = evaluateClaimsWithSources(
+    [
+      claim("The Tseung Kwan O Line is experiencing a service disruption near Yau Tong Station.", "pt-1"),
+      claim(
+        "The service disruption on the Tseung Kwan O Line is caused by a train technical fault.",
+        "pt-2",
+      ),
+    ],
+    {
+      ...emptyBundle(),
+      td: mtrDisruptionTrafficSnapshot(),
+    },
+  );
+
+  assertEqual(result.claims[0]?.verdict, "supported", "disruption claim is supported");
+  assertEqual(result.claims[1]?.verdict, "supported", "cause claim is supported");
+  assertEqual(result.claims[0]?.evidence.length, 1, "disruption claim attaches one TD record");
+  assertEqual(result.claims[1]?.evidence.length, 1, "cause claim attaches the same TD record");
+  assertEqual(
+    result.claims[0]?.evidence[0]?.id,
+    result.claims[1]?.evidence[0]?.id,
+    "both split claims reuse the same TD evidence item",
+  );
+  assertEqual(result.coverage, "high", "public transport deterministic result has high coverage");
+  assertEqual(
+    result.counts.unique_relevant_evidence_records,
+    1,
+    "one unique TD evidence record is counted",
+  );
+  assertEqual(result.counts.claim_evidence_links, 2, "one TD record is used across two claims");
+  assertEqual(
+    result.claims[0]?.explanation.includes("No matching live official source category"),
+    false,
+    "no developer-facing unsupported-category wording appears",
+  );
+}
+
+function testPublicTransportResolvedUpdateRefutesActiveClaimAndLeavesCauseInsufficient(): void {
+  const result = evaluateClaimsWithSources(
+    [
+      claim("The Tseung Kwan O Line is experiencing a service disruption near Yau Tong Station.", "pt-1"),
+      claim(
+        "The service disruption on the Tseung Kwan O Line is caused by a train technical fault.",
+        "pt-2",
+      ),
+    ],
+    {
+      ...emptyBundle(),
+      td: mtrIncidentNowOverTrafficSnapshot(),
+    },
+  );
+
+  assertEqual(result.claims[0]?.verdict, "refuted", "resolved update refutes active disruption");
+  assertEqual(
+    result.claims[1]?.verdict,
+    "insufficient_evidence",
+    "missing current cause leaves cause claim insufficient",
+  );
+  assertEqual(result.claims[0]?.evidence.length, 1, "resolved evidence attaches to claim 1");
+  assertEqual(result.claims[1]?.evidence.length, 1, "same resolved evidence attaches to claim 2");
+  assertEqual(result.counts.unique_relevant_evidence_records, 1, "unique evidence count is one");
+  assertEqual(result.counts.claim_evidence_links, 2, "same evidence is linked to two claims");
+}
+
+async function testPublicTransportOnlyRequestQueriesTdOnly(): Promise<void> {
+  const originalFetch = globalThis.fetch;
+  const requestedUrls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    requestedUrls.push(url);
+    if (url.includes("trafficnews.xml")) {
+      return new Response(mtrDisruptionXml(), {
+        status: 200,
+        headers: { "content-type": "application/xml" },
+      });
+    }
+    return new Response("", { status: 404 });
+  }) as typeof fetch;
+
+  try {
+    const result = await retrieveLiveEvidence([
+      claim("The Tseung Kwan O Line is experiencing a service disruption near Yau Tong Station.", "pt-1"),
+      claim(
+        "The service disruption on the Tseung Kwan O Line is caused by a train technical fault.",
+        "pt-2",
+      ),
+    ]);
+
+    assertEqual(result.claims[0]?.verdict, "supported", "live request supports disruption claim");
+    assertEqual(result.claims[1]?.verdict, "supported", "live request supports cause claim");
+    assertEqual(result.counts.official_sources_queried, 1, "public transport request queries one TD endpoint");
+    assertEqual(result.counts.feed_items_fetched, 1, "one official TD record is retrieved");
+    assertEqual(result.counts.relevant_evidence_attached, 1, "unique relevant evidence count is one");
+    assertEqual(result.counts.claim_evidence_links, 2, "same evidence is linked to two claims");
+    assertEqual(
+      requestedUrls.some((url) => url.includes("weatherAPI/opendata/weather.php")),
+      false,
+      "public-transport-only request does not query HKO",
+    );
+    assertEqual(
+      requestedUrls.some((url) => url.includes("trafficnews.xml")),
+      true,
+      "public-transport-only request queries TD XML",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+function mtrDisruptionTrafficSnapshot() {
+  return tdTrafficSnapshotFromXml(mtrDisruptionXml(), RETRIEVED_AT);
+}
+
+function mtrIncidentNowOverTrafficSnapshot() {
+  return tdTrafficSnapshotFromXml(mtrIncidentNowOverXml(), RETRIEVED_AT);
+}
+
+function mtrDisruptionXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<list>
+  <message>
+    <INCIDENT_NUMBER>IN-26-06001</INCIDENT_NUMBER>
+    <INCIDENT_HEADING_EN>Public Transport Service Disruption</INCIDENT_HEADING_EN>
+    <INCIDENT_DETAIL_EN>Train Technical Fault</INCIDENT_DETAIL_EN>
+    <LOCATION_EN>Tseung Kwan O Line Service Disruption</LOCATION_EN>
+    <DISTRICT_EN/>
+    <DIRECTION_EN/>
+    <ANNOUNCEMENT_DATE>2099-07-16T19:21:00</ANNOUNCEMENT_DATE>
+    <INCIDENT_STATUS_EN>NEW</INCIDENT_STATUS_EN>
+    <NEAR_LANDMARK_EN>Yau Tong Station</NEAR_LANDMARK_EN>
+    <BETWEEN_LANDMARK_EN/>
+    <CONTENT_EN>Tseung Kwan O Line service disruption near Yau Tong Station due to train technical fault.</CONTENT_EN>
+    <LATITUDE/>
+    <LONGITUDE/>
+  </message>
+</list>`;
+}
+
+function mtrIncidentNowOverXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<list>
+  <message>
+    <INCIDENT_NUMBER>IN-26-06001</INCIDENT_NUMBER>
+    <INCIDENT_HEADING_EN>Public Transport Service Disruption</INCIDENT_HEADING_EN>
+    <INCIDENT_DETAIL_EN>Train Technical Fault</INCIDENT_DETAIL_EN>
+    <LOCATION_EN>Tseung Kwan O Line Service Disruption</LOCATION_EN>
+    <DISTRICT_EN/>
+    <DIRECTION_EN/>
+    <ANNOUNCEMENT_DATE>2099-07-16T19:21:00</ANNOUNCEMENT_DATE>
+    <INCIDENT_STATUS_EN>UPDATED</INCIDENT_STATUS_EN>
+    <NEAR_LANDMARK_EN>Yau Tong Station</NEAR_LANDMARK_EN>
+    <BETWEEN_LANDMARK_EN/>
+    <CONTENT_EN>Transport Department has received notification from MTR Corporation Limited that the incident on the Tseung Kwan O Line is now over. Train service will be back to normal within a short period of time.</CONTENT_EN>
+    <LATITUDE/>
+    <LONGITUDE/>
+  </message>
+</list>`;
 }
 
 function emptyBundle(): SourceBundle {
