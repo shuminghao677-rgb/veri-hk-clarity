@@ -12,11 +12,12 @@ const claims = [
 ];
 
 const sources = [
-  { name: "HKO", label: "Hong Kong Observatory", icon: CloudSun, status: "live" },
-  { name: "TD", label: "Transport Department", icon: Route, status: "live" },
-  { name: "GovHK", label: "Government news", icon: Landmark, status: "live" },
-  { name: "EDB", label: "Education Bureau", icon: GraduationCap, status: "future" },
+  { name: "HKO", label: "Hong Kong Observatory", status: "live" },
+  { name: "TD", label: "Transport Department", status: "live" },
+  { name: "GovHK", label: "Government news", status: "live" },
+  { name: "EDB", label: "Education Bureau", status: "future" },
 ];
+
 
 const verdicts = [
   { label: "Supported", value: "01", className: "text-[#12805c]" },
