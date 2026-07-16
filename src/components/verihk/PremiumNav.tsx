@@ -1,8 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ShieldCheck } from "lucide-react";
-
 
 const navItems = [
+
   { label: "Story", to: "/" },
   { label: "Verify", to: "/verify" },
   { label: "Dashboard", to: "/dashboard" },
