@@ -105,13 +105,11 @@ export function StoryShowcase() {
                 transition={{ delay: index * 0.08 }}
                 className="border-b border-[rgb(8_23_45_/_10%)] pb-6 last:border-b-0 md:border-b-0 md:border-r md:pb-0 md:pr-6 md:last:border-r-0"
               >
-                <div className={`text-5xl font-semibold ${item.className}`}>{item.value}</div>
-                <div className="mt-3 text-sm font-medium text-[rgb(8_23_45_/_82%)]">
-                  {item.label}
-                </div>
+                <div className={`text-3xl font-semibold ${item.className}`}>{item.label}</div>
               </motion.div>
             ))}
           </div>
+
         </div>
         <div className="mt-16">
           <Button asChild size="lg" className="h-11 rounded-xl bg-[#0878f9] px-5 shadow-none hover:bg-[#006ee8]">
