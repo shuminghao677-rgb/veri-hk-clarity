@@ -2,7 +2,7 @@ import { Component, lazy, Suspense, useMemo, useState, type ReactNode } from "re
 import { motion, useReducedMotion } from "framer-motion";
 import { ExternalLink, MapPinned, Navigation, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+
 import { Card } from "@/components/ui/card";
 import type { PhaseOneClaim } from "@/lib/report-contract";
 import {
@@ -228,11 +228,15 @@ function TrafficMapInfoPanel({
         </div>
       )}
 
-      <Button asChild variant="outline" className="mt-4 w-full rounded-full">
-        <a href={activeItem.evidence.url} target="_blank" rel="noreferrer">
-          Open Official Notice <ExternalLink className="ml-2 h-3.5 w-3.5" />
-        </a>
-      </Button>
+      <a
+        href={activeItem.evidence.url}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-4 inline-flex w-full items-center justify-center text-sm font-bold text-foreground transition-colors hover:text-primary"
+      >
+        Open Official Notice <ExternalLink className="ml-2 h-3.5 w-3.5" />
+      </a>
+
 
       <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-auto pr-1">
         {items.map((item) => (

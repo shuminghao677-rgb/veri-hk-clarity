@@ -11,7 +11,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -144,13 +144,14 @@ function VerifyPage() {
                 </p>
               )}
             </div>
-            <Button
-              size="lg"
+            <button
+              type="button"
               onClick={analyze}
-              className="rounded-full px-8 shadow-soft sm:min-w-52"
+              className="text-base font-bold text-foreground transition-colors hover:text-primary sm:min-w-52"
             >
               Start analysis
-            </Button>
+            </button>
+
           </div>
         </Card>
       </motion.div>
@@ -194,15 +195,14 @@ function FileDropZone({
           <div className="truncate text-sm font-semibold">{file.name}</div>
           <div className="text-xs text-muted-foreground">Selected · {size} · ready to analyze</div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-1 rounded-full text-muted-foreground"
-          onClick={() => setFile(null)}
+        <button
           type="button"
+          className="text-sm font-bold text-muted-foreground transition-colors hover:text-foreground"
+          onClick={() => setFile(null)}
         >
-          <X className="h-4 w-4" /> Remove
-        </Button>
+          Remove
+        </button>
+
       </div>
     );
   }
@@ -232,10 +232,14 @@ function FileDropZone({
         <div className="text-base font-semibold">{title}</div>
         <div className="text-xs text-muted-foreground">{hint}</div>
       </div>
-      <Button variant="secondary" className="rounded-full" type="button" onClick={pick}>
-        {icon}
-        <span className="ml-2">{cta}</span>
-      </Button>
+      <button
+        type="button"
+        onClick={pick}
+        className="text-base font-bold text-foreground transition-colors hover:text-primary"
+      >
+        {cta}
+      </button>
+
       <input
         ref={inputRef}
         type="file"

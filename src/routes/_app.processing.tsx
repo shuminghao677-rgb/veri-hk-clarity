@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { AlertCircle, Check, Loader2, FastForward, RotateCcw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
+
 import { processingSteps } from "@/lib/mock-data";
 import { analyzeText } from "@/lib/preliminary-analysis";
 import { LATEST_REPORT_KEY, PENDING_INPUT_KEY, isPhaseOneReport } from "@/lib/report-contract";
@@ -187,31 +187,40 @@ function ProcessingPage() {
             <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
               {error}
             </div>
-            <div className="flex flex-wrap justify-center gap-3">
-              <Button onClick={runAnalysis} className="gap-2 rounded-full">
+            <div className="flex flex-wrap justify-center gap-6">
+              <button
+                type="button"
+                onClick={runAnalysis}
+                className="inline-flex items-center gap-2 text-base font-bold text-foreground transition-colors hover:text-primary"
+              >
                 <RotateCcw className="h-4 w-4" />
                 Retry
-              </Button>
-              <Button variant="outline" onClick={viewDemoReport} className="gap-2 rounded-full">
+              </button>
+              <button
+                type="button"
+                onClick={viewDemoReport}
+                className="inline-flex items-center gap-2 text-base font-bold text-foreground transition-colors hover:text-primary"
+              >
                 <FastForward className="h-4 w-4" />
                 View Demo Report
-              </Button>
+              </button>
             </div>
+
           </div>
         )}
 
         {import.meta.env.DEV && !error && (
           <div className="mt-6 flex justify-center">
-            <Button
-              variant="ghost"
-              size="sm"
+            <button
+              type="button"
               onClick={viewDemoReport}
-              className="gap-2 rounded-full text-xs text-muted-foreground hover:text-foreground"
+              className="inline-flex items-center gap-2 text-xs font-bold text-muted-foreground transition-colors hover:text-foreground"
             >
               <FastForward className="h-3.5 w-3.5" />
               Skip to demo result
-            </Button>
+            </button>
           </div>
+
         )}
       </Card>
     </div>

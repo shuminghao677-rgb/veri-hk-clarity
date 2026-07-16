@@ -34,7 +34,7 @@ import {
 } from "recharts";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -190,14 +190,21 @@ function Results() {
               <MetaChip icon={Clock}>Last checked {reportMeta.lastCheckedAt}</MetaChip>
             </div>
           </div>
-          <div className="flex gap-2 lg:justify-end">
-            <Button asChild variant="outline" className="rounded-full">
-              <Link to="/history">View history</Link>
-            </Button>
-            <Button asChild className="rounded-full shadow-soft">
-              <Link to="/verify">New verification</Link>
-            </Button>
+          <div className="flex gap-4 lg:justify-end">
+            <Link
+              to="/history"
+              className="text-sm font-bold text-foreground transition-colors hover:text-primary"
+            >
+              View history
+            </Link>
+            <Link
+              to="/verify"
+              className="text-sm font-bold text-foreground transition-colors hover:text-primary"
+            >
+              New verification
+            </Link>
           </div>
+
         </div>
 
         {/* Stat cards */}
@@ -644,11 +651,15 @@ function EvidenceCard({ ev }: { ev: Evidence }) {
           <div>{ev.updatedAt}</div>
           {ev.retrievedAt && <div>{ev.retrievedAt}</div>}
         </div>
-        <Button asChild size="sm" variant="outline" className="rounded-full">
-          <a href={ev.url} target="_blank" rel="noreferrer">
-            Open source <ExternalLink className="ml-1.5 h-3 w-3" />
-          </a>
-        </Button>
+        <a
+          href={ev.url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs font-bold text-foreground transition-colors hover:text-primary"
+        >
+          Open source <ExternalLink className="ml-1 inline h-3 w-3" />
+        </a>
+
       </div>
       <div
         className="mt-3 truncate rounded-lg bg-muted/40 px-2 py-1 font-mono text-[10px] text-muted-foreground"
