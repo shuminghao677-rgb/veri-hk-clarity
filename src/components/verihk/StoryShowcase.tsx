@@ -38,11 +38,8 @@ export function StoryShowcase() {
             transition={{ duration: 0.65 }}
             className="max-w-4xl"
           >
-            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-              Official Hong Kong data · Explainable AI
-            </div>
             <h1 className="mt-6 max-w-4xl text-[2.75rem] font-semibold leading-[1.05] text-foreground sm:text-5xl md:text-6xl lg:text-[4.25rem]">
+
               Verify information
               <span className="text-gradient"> with official Hong Kong data.</span>
             </h1>
