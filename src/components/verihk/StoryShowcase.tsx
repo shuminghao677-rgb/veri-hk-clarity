@@ -17,8 +17,8 @@ const sources = [
   { name: "EDB", label: "Education Bureau", status: "future" },
 ];
 
-
 const verdicts = [
+
   { label: "Supported", value: "01", className: "text-[#12805c]" },
   { label: "Refuted", value: "01", className: "text-[#d92d20]" },
   { label: "Need evidence", value: "01", className: "text-[#a16207]" },
