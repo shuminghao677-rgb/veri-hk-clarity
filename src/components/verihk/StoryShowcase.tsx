@@ -38,7 +38,7 @@ export function StoryShowcase() {
             transition={{ duration: 0.65 }}
             className="max-w-4xl"
           >
-            <h1 className="mt-6 max-w-4xl text-[2.75rem] font-semibold leading-[1.05] text-foreground sm:text-5xl md:text-6xl lg:text-[4.25rem]">
+            <h1 className="max-w-4xl text-[2.75rem] font-semibold leading-[1.05] text-foreground sm:text-5xl md:text-6xl lg:text-[4.25rem]">
 
               Verify information
               <span className="text-gradient"> with official Hong Kong data.</span>
