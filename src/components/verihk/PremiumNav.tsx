@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
+
 
 const navItems = [
   { label: "Story", to: "/" },
