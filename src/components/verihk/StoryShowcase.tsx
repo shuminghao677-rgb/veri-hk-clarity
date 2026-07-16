@@ -43,18 +43,20 @@ export function StoryShowcase() {
             transition={{ duration: 0.65 }}
             className="max-w-4xl"
           >
-            <div className="text-xs font-medium uppercase tracking-[0.18em] text-[rgb(8_23_45_/_48%)]">
+            <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
               Official Hong Kong data · Explainable AI
             </div>
-            <h1 className="mt-5 max-w-4xl text-5xl font-semibold leading-[1.02] text-[rgb(8_23_45_/_90%)] sm:text-6xl lg:text-[76px]">
-              Verify information with official Hong Kong data.
+            <h1 className="mt-6 max-w-4xl text-[2.75rem] font-semibold leading-[1.05] text-foreground sm:text-5xl md:text-6xl lg:text-[4.25rem]">
+              Verify information
+              <span className="text-gradient"> with official Hong Kong data.</span>
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-[rgb(8_23_45_/_58%)]">
-              VeriHK turns public claims into evidence-backed conclusions using live official
+            <p className="mt-7 max-w-2xl text-lg leading-8 text-muted-foreground">
+              VeriHK turns public claims into evidence-backed conclusions using up-to-date official
               sources.
             </p>
-            <div className="mt-9 flex flex-wrap items-center gap-5">
-              <Button asChild size="lg" className="h-11 rounded-xl bg-[#0878f9] px-5 shadow-none hover:bg-[#006ee8]">
+            <div className="mt-10 flex flex-wrap items-center gap-4">
+              <Button asChild size="lg" className="h-12 rounded-full bg-primary px-6 shadow-soft hover:bg-primary/90">
                 <Link to="/verify">
                   Start Verification
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -62,11 +64,12 @@ export function StoryShowcase() {
               </Button>
               <Link
                 to="/verify"
-                className="text-sm font-medium text-[rgb(8_23_45_/_64%)] underline decoration-[rgb(8_23_45_/_18%)] underline-offset-4 transition-colors hover:text-[rgb(8_23_45_/_88%)]"
+                className="text-sm font-medium text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground"
               >
                 Paste text or upload a screenshot
               </Link>
             </div>
+
           </motion.div>
         </div>
       </section>
