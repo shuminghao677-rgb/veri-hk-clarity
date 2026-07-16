@@ -64,11 +64,10 @@ export function StoryShowcase() {
                 Paste text or upload a screenshot
               </Link>
             </div>
-
           </motion.div>
         </div>
-
       </section>
+
 
       <section className="premium-container grid gap-14 py-24 md:py-32 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
         <StoryCopy eyebrow="Scene 2" title="Claims are extracted before evidence is searched.">
