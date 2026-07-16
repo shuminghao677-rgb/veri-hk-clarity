@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Clock, FileCheck2, Gauge, ShieldCheck, Sparkles, XCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Clock, FileCheck2, Gauge, ShieldCheck, Sparkles, XCircle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { historyReports } from "@/lib/mock-data";
+
 
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({
@@ -32,12 +32,13 @@ function Dashboard() {
             A clean command center for recent reports, official-source coverage, and claim outcomes.
           </p>
         </div>
-        <Button asChild size="lg" className="rounded-full px-6">
-          <Link to="/verify">
-            New verification
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-        </Button>
+        <Link
+          to="/verify"
+          className="text-base font-bold text-foreground transition-colors hover:text-primary"
+        >
+          New verification
+        </Link>
+
       </div>
 
       <div className="mt-12 grid gap-4 md:grid-cols-4">
@@ -56,9 +57,13 @@ function Dashboard() {
                 Reports opened from History currently use demo metadata.
               </p>
             </div>
-            <Button asChild variant="ghost" className="rounded-full">
-              <Link to="/history">View all</Link>
-            </Button>
+            <Link
+              to="/history"
+              className="text-sm font-bold text-foreground transition-colors hover:text-primary"
+            >
+              View all
+            </Link>
+
           </div>
           <div className="divide-y">
             {historyReports.slice(0, 4).map((report) => (

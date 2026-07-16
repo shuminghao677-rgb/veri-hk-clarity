@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, CalendarClock, ShieldCheck, XCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CalendarClock, ShieldCheck, XCircle } from "lucide-react";
 import { historyReports } from "@/lib/mock-data";
+
 
 export const Route = createFileRoute("/_app/history")({
   head: () => ({
@@ -27,12 +27,13 @@ function HistoryPage() {
             Verification history.
           </h1>
         </div>
-        <Button asChild className="h-10 rounded-xl bg-[#0878f9] px-4 shadow-none hover:bg-[#006ee8]">
-          <Link to="/verify">
-            New verification
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-        </Button>
+        <Link
+          to="/verify"
+          className="text-base font-bold text-foreground transition-colors hover:text-primary"
+        >
+          New verification
+        </Link>
+
       </div>
 
       <div className="border-y border-[rgb(8_23_45_/_12%)]">

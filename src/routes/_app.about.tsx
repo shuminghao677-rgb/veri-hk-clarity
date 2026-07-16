@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Database, Eye, Network, ShieldCheck, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Database, Eye, Network, ShieldCheck, Sparkles } from "lucide-react";
+
 
 export const Route = createFileRoute("/_app/about")({
   head: () => ({
@@ -28,12 +28,13 @@ function AboutPage() {
           VeriHK turns public claims into auditable evidence trails using official Hong Kong data.
           The product goal is not just to answer, but to show how the answer was reached.
         </p>
-        <Button asChild size="lg" className="mt-8 h-11 rounded-xl bg-[#0878f9] px-5 shadow-none hover:bg-[#006ee8]">
-          <Link to="/verify">
-            Try the verification flow
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-        </Button>
+        <Link
+          to="/verify"
+          className="mt-8 inline-block text-base font-bold text-foreground transition-colors hover:text-primary"
+        >
+          Try the verification flow
+        </Link>
+
       </div>
 
       <div className="mt-16 border-y border-[rgb(8_23_45_/_12%)]">

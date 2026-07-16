@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
 import { FileText } from "lucide-react";
-import { Button } from "@/components/ui/button";
+
 
 
 const claims = [
@@ -110,10 +110,14 @@ export function StoryShowcase() {
         </div>
 
         <div className="mt-16">
-          <Button asChild size="lg" className="h-11 rounded-xl bg-[#0878f9] px-5 shadow-none hover:bg-[#006ee8]">
-            <Link to="/dashboard">Enter dashboard</Link>
-          </Button>
+          <Link
+            to="/dashboard"
+            className="text-base font-bold text-foreground transition-colors hover:text-primary"
+          >
+            Enter dashboard
+          </Link>
         </div>
+
       </section>
     </div>
   );

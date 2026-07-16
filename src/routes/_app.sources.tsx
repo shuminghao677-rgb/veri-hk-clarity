@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ExternalLink, Landmark } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { officialSources } from "@/lib/mock-data";
 import { SourceIcon } from "@/components/verihk/SourceIcon";
+
 
 export const Route = createFileRoute("/_app/sources")({
   head: () => ({
@@ -55,12 +55,15 @@ function SourcesPage() {
             </div>
             <div className="text-sm text-[rgb(8_23_45_/_58%)]">{source.type}</div>
             <div className="text-sm leading-6 text-[rgb(8_23_45_/_62%)]">{source.description}</div>
-            <Button asChild size="sm" variant="outline" className="h-9 rounded-xl justify-self-start md:justify-self-end">
-              <a href={source.url} target="_blank" rel="noreferrer">
-                Open
-                <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-              </a>
-            </Button>
+            <a
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm font-bold text-foreground transition-colors hover:text-primary"
+            >
+              Open <ExternalLink className="ml-1 inline h-3.5 w-3.5" />
+            </a>
+
           </div>
         ))}
       </div>
