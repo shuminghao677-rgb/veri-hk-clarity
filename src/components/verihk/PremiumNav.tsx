@@ -28,7 +28,7 @@ export function PremiumNav() {
               <Link
                 key={item.to}
                 to={item.to}
-                className={`relative py-1 text-sm transition-colors after:absolute after:-bottom-3 after:left-0 after:h-px after:bg-[#08172d] after:transition-all after:duration-200 ${
+                className={`relative py-1 text-sm transition-colors after:absolute after:-bottom-3 after:left-0 after:h-0.5 after:bg-[#08172d] after:transition-all after:duration-200 ${
                   active
                     ? "font-medium text-[rgb(8_23_45_/_90%)] after:w-full after:opacity-100"
                     : "text-[rgb(8_23_45_/_55%)] after:w-0 after:opacity-0 hover:text-[rgb(8_23_45_/_78%)]"
