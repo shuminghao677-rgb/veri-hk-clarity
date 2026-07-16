@@ -107,8 +107,8 @@ export function StoryShowcase() {
               </motion.div>
             ))}
           </div>
-
         </div>
+
         <div className="mt-16">
           <Button asChild size="lg" className="h-11 rounded-xl bg-[#0878f9] px-5 shadow-none hover:bg-[#006ee8]">
             <Link to="/dashboard">Enter dashboard</Link>
