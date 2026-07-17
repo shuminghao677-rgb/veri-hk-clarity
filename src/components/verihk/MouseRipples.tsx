@@ -23,12 +23,35 @@ export function MouseRipples() {
       return start + (end - start) * factor;
     };
 
+    const addRipple = (x: number, y: number) => {
+      const id = ++idRef.current;
+      setRipples((prev) => {
+        const next = [...prev, { id, x, y }];
+        return next.length > 6 ? next.slice(next.length - 6) : next;
+      });
+      window.setTimeout(() => {
+        setRipples((prev) => prev.filter((r) => r.id !== id));
+      }, 900);
+    };
+
     const animate = () => {
       const cursor = cursorRef.current;
       if (cursor) {
         currentRef.current.x = lerp(currentRef.current.x, targetRef.current.x, 0.12);
         currentRef.current.y = lerp(currentRef.current.y, targetRef.current.y, 0.12);
         cursor.style.transform = `translate3d(${currentRef.current.x}px, ${currentRef.current.y}px, 0) translate(-50%, -50%)`;
+
+        const dx = currentRef.current.x - trailRef.current.x;
+        const dy = currentRef.current.y - trailRef.current.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        trailRef.current.distance += dist;
+        trailRef.current.x = currentRef.current.x;
+        trailRef.current.y = currentRef.current.y;
+
+        if (trailRef.current.distance > 120) {
+          trailRef.current.distance = 0;
+          addRipple(currentRef.current.x, currentRef.current.y);
+        }
       }
       rafRef.current = requestAnimationFrame(animate);
     };
