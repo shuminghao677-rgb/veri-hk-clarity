@@ -182,3 +182,18 @@
 @utility shadow-soft {
   box-shadow: 0 10px 30px -12px color-mix(in oklab, var(--foreground) 12%, transparent);
 }
+
+@keyframes ripple-out {
+  0% {
+    opacity: 0.45;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(3.2);
+  }
+}
+
+.ripple-out {
+  animation: ripple-out 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
