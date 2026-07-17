@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 
 interface Ripple {
   id: number;
@@ -11,16 +10,37 @@ export function MouseRipples() {
   const [mounted, setMounted] = useState(false);
   const [ripples, setRipples] = useState<Ripple[]>([]);
   const idRef = useRef(0);
-  const lastRef = useRef(0);
+  const glowRef = useRef<HTMLDivElement | null>(null);
+  const targetRef = useRef({ x: 0, y: 0 });
+  const currentRef = useRef({ x: 0, y: 0 });
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     setMounted(true);
 
-    const addRipple = (x: number, y: number) => {
+    const lerp = (start: number, end: number, factor: number) => {
+      return start + (end - start) * factor;
+    };
+
+    const animate = () => {
+      const glow = glowRef.current;
+      if (glow) {
+        currentRef.current.x = lerp(currentRef.current.x, targetRef.current.x, 0.14);
+        currentRef.current.y = lerp(currentRef.current.y, targetRef.current.y, 0.14);
+        glow.style.transform = `translate3d(${currentRef.current.x}px, ${currentRef.current.y}px, 0) translate(-50%, -50%)`;
+      }
+      rafRef.current = requestAnimationFrame(animate);
+    };
+
+    const handleMove = (e: MouseEvent) => {
+      targetRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handleClick = (e: MouseEvent) => {
       const id = ++idRef.current;
       setRipples((prev) => {
-        const next = [...prev, { id, x, y }];
-        return next.length > 10 ? next.slice(next.length - 10) : next;
+        const next = [...prev, { id, x: e.clientX, y: e.clientY }];
+        return next.length > 4 ? next.slice(next.length - 4) : next;
       });
 
       window.setTimeout(() => {
@@ -28,23 +48,14 @@ export function MouseRipples() {
       }, 900);
     };
 
-    const handleMove = (e: MouseEvent) => {
-      const now = Date.now();
-      if (now - lastRef.current < 100) return;
-      lastRef.current = now;
-      addRipple(e.clientX, e.clientY);
-    };
-
-    const handleClick = (e: MouseEvent) => {
-      addRipple(e.clientX, e.clientY);
-    };
-
     window.addEventListener("mousemove", handleMove, { passive: true });
     window.addEventListener("click", handleClick, { passive: true });
+    rafRef.current = requestAnimationFrame(animate);
 
     return () => {
       window.removeEventListener("mousemove", handleMove);
       window.removeEventListener("click", handleClick);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, []);
 
@@ -52,25 +63,24 @@ export function MouseRipples() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[100] overflow-hidden">
-      <AnimatePresence>
-        {ripples.map((ripple) => (
-          <motion.span
-            key={ripple.id}
-            initial={{ opacity: 0.5, scale: 0.2 }}
-            animate={{ opacity: 0, scale: 2.8 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute rounded-full border border-primary/35 bg-primary/12"
-            style={{
-              left: ripple.x,
-              top: ripple.y,
-              width: 16,
-              height: 16,
-              transform: "translate(-50%, -50%)",
-            }}
-          />
-        ))}
-      </AnimatePresence>
+      <div
+        ref={glowRef}
+        className="absolute top-0 left-0 h-7 w-7 rounded-full bg-primary/20 blur-md"
+        style={{ willChange: "transform" }}
+      />
+      {ripples.map((ripple) => (
+        <span
+          key={ripple.id}
+          className="absolute rounded-full border border-primary/30 bg-primary/5 ripple-out"
+          style={{
+            left: ripple.x,
+            top: ripple.y,
+            width: 14,
+            height: 14,
+            transform: "translate(-50%, -50%)",
+          }}
+        />
+      ))}
     </div>
   );
 }
