@@ -104,6 +104,24 @@ function AboutPage() {
               </div>
             </div>
           ))}
+          <div className="grid gap-4 border-t border-[rgb(8_23_45_/_10%)] py-6 md:grid-cols-[220px_1fr] md:items-start">
+            <div className="text-xl font-medium tracking-[-0.02em] text-[rgb(8_23_45_/_88%)]">
+              Repository
+            </div>
+            <div className="max-w-3xl">
+              <div className="text-base leading-7 text-[rgb(8_23_45_/_60%)]">
+                Source code and project history for VeriHK.
+              </div>
+              <a
+                href="https://github.com/xinyunfan2-dev/VeriHK-HKICT"
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex border-b border-[rgb(8_23_45_/_18%)] pb-0.5 text-sm font-medium text-[rgb(8_23_45_/_72%)] transition-colors hover:border-primary hover:text-primary"
+              >
+                github.com/xinyunfan2-dev/VeriHK-HKICT
+              </a>
+            </div>
+          </div>
         </div>
       </Reveal>
 
