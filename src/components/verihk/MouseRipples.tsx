@@ -13,6 +13,7 @@ export function MouseRipples() {
   const cursorRef = useRef<HTMLDivElement | null>(null);
   const targetRef = useRef({ x: 0, y: 0 });
   const currentRef = useRef({ x: 0, y: 0 });
+  const trailRef = useRef({ x: 0, y: 0, distance: 0 });
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
