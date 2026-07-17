@@ -61,15 +61,7 @@ export function MouseRipples() {
     };
 
     const handleClick = (e: MouseEvent) => {
-      const id = ++idRef.current;
-      setRipples((prev) => {
-        const next = [...prev, { id, x: e.clientX, y: e.clientY }];
-        return next.length > 4 ? next.slice(next.length - 4) : next;
-      });
-
-      window.setTimeout(() => {
-        setRipples((prev) => prev.filter((r) => r.id !== id));
-      }, 900);
+      addRipple(e.clientX, e.clientY);
     };
 
     window.addEventListener("mousemove", handleMove, { passive: true });
