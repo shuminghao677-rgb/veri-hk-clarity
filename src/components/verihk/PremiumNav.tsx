@@ -41,13 +41,6 @@ export function PremiumNav() {
           })}
         </nav>
 
-        <Link
-          to="/verify"
-          className="ml-auto inline-flex items-center border-b border-[rgb(8_23_45_/_18%)] pb-0.5 text-sm font-medium text-foreground transition-colors hover:border-[#0878f9] hover:text-primary md:ml-3"
-        >
-          Start Verification
-        </Link>
-
       </div>
     </header>
   );
