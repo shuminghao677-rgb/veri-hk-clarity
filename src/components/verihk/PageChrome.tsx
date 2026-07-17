@@ -31,8 +31,8 @@ export function PageHeader({
 }) {
   return (
     <div className={`relative mb-12 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end ${className}`}>
-      <div className="pointer-events-none absolute -left-6 -top-10 h-52 w-60 rounded-full bg-primary/8 blur-[72px]" />
-      <div className="pointer-events-none absolute left-1/3 -top-8 h-44 w-48 rounded-full bg-primary-glow/6 blur-[60px]" />
+      <div className="pointer-events-none absolute -left-4 -top-8 h-40 w-52 rounded-full bg-primary/10 blur-[56px]" />
+      <div className="pointer-events-none absolute left-1/4 -top-6 h-36 w-40 rounded-full bg-primary-glow/8 blur-[48px]" />
       <div className="relative max-w-4xl">
         <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[rgb(8_23_45_/_42%)]">
           {icon}
