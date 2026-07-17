@@ -30,13 +30,15 @@ export function PageHeader({
   className?: string;
 }) {
   return (
-    <div className={`mb-12 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end ${className}`}>
-      <div className="max-w-4xl">
+    <div className={`relative mb-12 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end ${className}`}>
+      <div className="pointer-events-none absolute -left-12 -top-16 h-72 w-80 rounded-full bg-primary-glow/18 blur-3xl" />
+      <div className="pointer-events-none absolute -right-12 -top-10 h-56 w-64 rounded-full bg-primary/10 blur-3xl" />
+      <div className="relative max-w-4xl">
         <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[rgb(8_23_45_/_42%)]">
           {icon}
           {eyebrow}
         </div>
-        <h1 className="mt-5 max-w-4xl text-4xl font-medium leading-tight tracking-[-0.02em] text-[rgb(8_23_45_/_90%)] md:text-6xl">
+        <h1 className="mt-5 max-w-4xl text-4xl font-semibold leading-tight tracking-[-0.02em] text-[rgb(8_31_66_/_95%)] md:text-6xl">
           {title}
         </h1>
         {description && (
@@ -45,7 +47,7 @@ export function PageHeader({
           </p>
         )}
       </div>
-      {action && <div className="lg:justify-self-end">{action}</div>}
+      {action && <div className="relative lg:justify-self-end">{action}</div>}
     </div>
   );
 }
