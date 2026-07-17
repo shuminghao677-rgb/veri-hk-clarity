@@ -72,8 +72,8 @@ export function TrafficEvidenceMap({ claims, formatTime }: TrafficEvidenceMapPro
           <TrafficMapFallback items={items} activeItem={activeItem} formatTime={formatTime} />
         </Card>
 
-        <Card className="hidden overflow-hidden rounded-[24px] border-white/60 bg-white/75 shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl lg:block">
-          <div className="grid h-[420px] grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)]">
+        <Card className="hidden rounded-[24px] border-white/60 bg-white/75 shadow-[0_24px_80px_rgba(15,23,42,0.12)] backdrop-blur-xl lg:block">
+          <div className="grid min-h-[560px] grid-cols-[minmax(0,1.45fr)_minmax(360px,0.95fr)]">
             {locatedItems.length > 0 && !mapFailed && !prefersReducedMotion ? (
               <TrafficMapErrorBoundary
                 fallback={<TrafficMapFallback items={items} activeItem={activeItem} formatTime={formatTime} />}
@@ -127,7 +127,7 @@ function TrafficMapFallback({
   formatTime: (value: string) => string;
 }) {
   return (
-    <div className="grid h-full place-items-center bg-gradient-to-br from-sky-50 via-white to-slate-100 p-8">
+    <div className="grid min-h-[560px] place-items-center bg-gradient-to-br from-sky-50 via-white to-slate-100 p-8">
       <div className="max-w-md rounded-[24px] border border-white/70 bg-white/80 p-6 shadow-soft backdrop-blur">
         <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           <MapPinned className="h-5 w-5" />

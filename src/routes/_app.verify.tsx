@@ -1,22 +1,39 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
+  CloudSun,
   FileText,
-  Image as ImageIcon,
-  FileType,
-  UploadCloud,
   Sparkles,
-  X,
-  CheckCircle2,
   AlertCircle,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { uploadedContent } from "@/lib/mock-data";
-import { MAX_ANALYSIS_INPUT_CHARS, PENDING_INPUT_KEY } from "@/lib/report-contract";
+import { PageFrame, PageHeader } from "@/components/verihk/PageChrome";
+import {
+  MAX_ANALYSIS_INPUT_CHARS,
+  PENDING_INPUT_KEY,
+  PENDING_TRAFFIC_GENERATION_METADATA_KEY,
+  PENDING_VERIFICATION_MODE_KEY,
+  type TrafficGenerationMetadata,
+  type VerificationMode,
+} from "@/lib/report-contract";
+import {
+  VERIFICATION_MODES,
+  getVerificationModeMismatchMessage,
+} from "@/lib/verification-mode";
+import { formatHongKongTime } from "@/lib/live-sources";
+import {
+  generateTrafficTestClaims,
+  getGeneratedSemanticField,
+  loadTrafficTestFeed,
+  type TrafficGeneratedClaims,
+  type TrafficTestFeedResponse,
+  type TrafficTestRecord,
+} from "@/lib/traffic-test-feed";
 
 export const Route = createFileRoute("/_app/verify")({
   head: () => ({
@@ -25,7 +42,7 @@ export const Route = createFileRoute("/_app/verify")({
       {
         name: "description",
         content:
-          "Submit text, an image, or a PDF and verify it against timely official Hong Kong sources.",
+          "Submit a factual claim and verify it against timely official Hong Kong sources.",
       },
       { property: "og:title", content: "Verify — VeriHK" },
       {
@@ -37,10 +54,31 @@ export const Route = createFileRoute("/_app/verify")({
   component: VerifyPage,
 });
 
+const WEATHER_TEST_CLAIMS = [
+  "A Thunderstorm Warning is currently in force in Hong Kong.",
+  "Typhoon Signal No. 3 is currently in force.",
+  "The Amber Rainstorm Warning is currently active.",
+  "There are no weather warnings currently in force in Hong Kong.",
+  "At least one weather warning is currently active in Hong Kong.",
+  "All weather warnings have been cancelled.",
+  "The current temperature in Hong Kong is 28°C.",
+  "The current temperature is around 28°C.",
+  "The current relative humidity is above 50%.",
+  "The current temperature is below 10°C.",
+];
+
 function VerifyPage() {
   const navigate = useNavigate();
-  const [text, setText] = useState(uploadedContent);
+  const [text, setText] = useState("");
   const [error, setError] = useState("");
+  const [mode, setMode] = useState<VerificationMode>("auto");
+  const [trafficFeed, setTrafficFeed] = useState<TrafficTestFeedResponse | null>(null);
+  const [trafficFeedStatus, setTrafficFeedStatus] = useState<
+    "idle" | "loading" | "success" | "empty" | "error"
+  >("idle");
+  const [selectedTrafficRecordId, setSelectedTrafficRecordId] = useState<string | null>(null);
+  const [claimType, setClaimType] = useState<"supported" | "refuted">("supported");
+  const trimmedText = text.trim();
 
   const analyze = () => {
     const trimmed = text.trim();
@@ -57,27 +95,40 @@ function VerifyPage() {
       return;
     }
 
+    const modeMismatch = getVerificationModeMismatchMessage(trimmed, mode);
+    if (modeMismatch) {
+      setError(modeMismatch);
+      return;
+    }
+
     window.sessionStorage.setItem(PENDING_INPUT_KEY, trimmed);
+    window.sessionStorage.setItem(PENDING_VERIFICATION_MODE_KEY, mode);
     setError("");
     navigate({ to: "/processing" });
   };
 
+  const loadTrafficRecords = async () => {
+    setTrafficFeedStatus("loading");
+    try {
+      const result = await loadTrafficTestFeed();
+      setTrafficFeed(result);
+      setTrafficFeedStatus(result.records.length ? "success" : "empty");
+      setSelectedTrafficRecordId((current) =>
+        current && result.records.some((record) => record.id === current) ? current : null,
+      );
+    } catch {
+      setTrafficFeedStatus("error");
+    }
+  };
+
   return (
-    <div className="premium-container py-10 md:py-16">
-      <div className="mb-10 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
-        <div>
-          <div className="inline-flex w-fit items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
-            <Sparkles className="h-3.5 w-3.5 text-foreground" /> Verification workspace
-          </div>
-          <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-tight tracking-normal md:text-6xl">
-            Turn a message into an evidence network.
-          </h1>
-        </div>
-        <p className="max-w-xl text-base leading-7 text-muted-foreground lg:justify-self-end">
-          Paste the content you want checked. VeriHK will keep the same secure backend flow:
-          extract claims, query official sources, and build an explainable report.
-        </p>
-      </div>
+    <PageFrame>
+      <PageHeader
+        eyebrow="Verification workspace"
+        icon={<Sparkles className="h-3.5 w-3.5" />}
+        title="Turn a message into an evidence network."
+        description="Paste the content you want checked. VeriHK will keep the same secure backend flow: extract claims, query official sources, and build an explainable report."
+      />
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -85,52 +136,94 @@ function VerifyPage() {
         transition={{ duration: 0.4 }}
       >
         <Card className="panel overflow-hidden rounded-[2rem] p-5 md:p-8">
-          <Tabs defaultValue="text">
-            <TabsList className="grid w-full grid-cols-3 rounded-full bg-muted/70 p-1">
-              <TabsTrigger value="text" className="rounded-xl gap-2">
-                <FileText className="h-4 w-4" /> Text
-              </TabsTrigger>
-              <TabsTrigger value="image" className="rounded-xl gap-2">
-                <ImageIcon className="h-4 w-4" /> Image
-              </TabsTrigger>
-              <TabsTrigger value="pdf" className="rounded-xl gap-2">
-                <FileType className="h-4 w-4" /> PDF
-              </TabsTrigger>
-            </TabsList>
+          <div>
+            <label
+              htmlFor="verification-text"
+              className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"
+            >
+              <FileText className="h-4 w-4" />
+              Claim text
+            </label>
+            <Textarea
+              id="verification-text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Enter a factual claim to verify..."
+              className="min-h-72 resize-none rounded-3xl border-border/70 bg-background/80 p-6 text-base leading-relaxed shadow-inner"
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              {text.length} / {MAX_ANALYSIS_INPUT_CHARS.toLocaleString()} characters · English &
+              繁體中文 supported
+            </p>
+            <div className="mt-3 space-y-1 text-xs leading-relaxed text-muted-foreground">
+              <div className="font-medium text-foreground/70">Example claims:</div>
+              <p>"The current temperature in Hong Kong is above 30°C."</p>
+              <p>"Traffic is busy on Nathan Road."</p>
+              <p>Supports weather and transport claims verified against official Hong Kong sources.</p>
+            </div>
+          </div>
 
-            <TabsContent value="text" className="mt-6">
-              <Textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Paste news, claims or announcements..."
-                className="min-h-72 resize-none rounded-3xl border-border/70 bg-background/80 p-6 text-base leading-relaxed shadow-inner"
-              />
-              <p className="mt-2 text-xs text-muted-foreground">
-                {text.length} / {MAX_ANALYSIS_INPUT_CHARS.toLocaleString()} characters · English &
-                繁體中文 supported
-              </p>
-            </TabsContent>
+          <div className="mt-7">
+            <fieldset>
+              <legend className="text-sm font-semibold text-foreground">Verification Mode</legend>
+              <div
+                className="mt-3 grid rounded-2xl border bg-muted/55 p-1 sm:grid-cols-3"
+                aria-label="Verification mode"
+              >
+                {VERIFICATION_MODES.map((item) => {
+                  const selected = mode === item.value;
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => {
+                        setMode(item.value);
+                        setError("");
+                      }}
+                      className={`rounded-xl px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                        selected
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold">{item.label}</span>
+                      <span className="mt-1 block text-xs leading-relaxed">{item.description}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          </div>
 
-            <TabsContent value="image" className="mt-6">
-              <FileDropZone
-                accept="image/png,image/jpeg,image/webp"
-                icon={<ImageIcon className="h-6 w-6" />}
-                title="Drop an image or click to browse"
-                hint="PNG, JPG or WEBP · up to 10 MB"
-                cta="Choose Image"
-              />
-            </TabsContent>
+          {mode === "weather" && (
+            <WeatherTestClaimsPanel
+              onUseClaim={(claim) => {
+                setText(claim);
+                setError("");
+                window.sessionStorage.removeItem(PENDING_TRAFFIC_GENERATION_METADATA_KEY);
+              }}
+            />
+          )}
 
-            <TabsContent value="pdf" className="mt-6">
-              <FileDropZone
-                accept="application/pdf"
-                icon={<FileType className="h-6 w-6" />}
-                title="Drop a PDF or click to browse"
-                hint="PDF · up to 25 MB"
-                cta="Choose PDF"
-              />
-            </TabsContent>
-          </Tabs>
+          {mode === "traffic" && (
+            <TrafficTestPanel
+              feed={trafficFeed}
+              status={trafficFeedStatus}
+              selectedRecordId={selectedTrafficRecordId}
+              claimType={claimType}
+              onLoad={loadTrafficRecords}
+              onSelectRecord={(recordId) => setSelectedTrafficRecordId(recordId)}
+              onClaimTypeChange={setClaimType}
+              onUseClaim={(claim, metadata) => {
+                setText(claim);
+                window.sessionStorage.setItem(
+                  PENDING_TRAFFIC_GENERATION_METADATA_KEY,
+                  JSON.stringify(metadata),
+                );
+              }}
+            />
+          )}
 
           <div className="mt-8 flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-2">
@@ -147,7 +240,8 @@ function VerifyPage() {
             <button
               type="button"
               onClick={analyze}
-              className="text-base font-bold text-foreground transition-colors hover:text-primary sm:min-w-52"
+              disabled={!trimmedText}
+              className="text-base font-bold text-foreground transition-colors hover:text-primary disabled:cursor-not-allowed disabled:text-muted-foreground sm:min-w-52"
             >
               Start analysis
             </button>
@@ -155,98 +249,335 @@ function VerifyPage() {
           </div>
         </Card>
       </motion.div>
+    </PageFrame>
+  );
+}
+
+function WeatherTestClaimsPanel({ onUseClaim }: { onUseClaim: (claim: string) => void }) {
+  return (
+    <section
+      className="mt-7 rounded-[1.75rem] border bg-background/60 p-4 md:p-5"
+      aria-labelledby="weather-test-claims-title"
+    >
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <CloudSun className="h-4 w-4" />
+        </div>
+        <div>
+          <h2 id="weather-test-claims-title" className="text-sm font-semibold">
+            Weather Test Claims
+          </h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Try current-warning, no-warning, temperature and humidity examples against live HKO data.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-2">
+        {WEATHER_TEST_CLAIMS.map((claim) => (
+          <button
+            key={claim}
+            type="button"
+            onClick={() => onUseClaim(claim)}
+            className="rounded-2xl border bg-background/70 p-3 text-left text-sm leading-relaxed transition-colors hover:border-foreground/40 hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {claim}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function TrafficTestPanel({
+  feed,
+  status,
+  selectedRecordId,
+  claimType,
+  onLoad,
+  onSelectRecord,
+  onClaimTypeChange,
+  onUseClaim,
+}: {
+  feed: TrafficTestFeedResponse | null;
+  status: "idle" | "loading" | "success" | "empty" | "error";
+  selectedRecordId: string | null;
+  claimType: "supported" | "refuted";
+  onLoad: () => void;
+  onSelectRecord: (recordId: string) => void;
+  onClaimTypeChange: (claimType: "supported" | "refuted") => void;
+  onUseClaim: (claim: string, metadata: TrafficGenerationMetadata) => void;
+}) {
+  const records = feed?.records ?? [];
+  const selectedRecord = records.find((record) => record.id === selectedRecordId) ?? null;
+  const generatedClaims = selectedRecord ? generateTrafficTestClaims(selectedRecord) : null;
+  const selectedClaim =
+    claimType === "supported" ? generatedClaims?.supported : generatedClaims?.refuted;
+  const refutedDisabled = Boolean(selectedRecord && !generatedClaims?.refuted);
+  const loading = status === "loading";
+  const generatedSemanticField = selectedRecord
+    ? getGeneratedSemanticField(selectedRecord, claimType)
+    : "";
+
+  return (
+    <section
+      className="mt-7 rounded-[1.75rem] border bg-background/60 p-4 md:p-5"
+      aria-labelledby="traffic-test-panel-title"
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 id="traffic-test-panel-title" className="text-sm font-semibold">
+            Current Traffic Events
+          </h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Generate a verification example from the current official TD feed.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onLoad}
+          disabled={loading}
+          className="inline-flex items-center gap-2 text-sm font-bold text-foreground transition-colors hover:text-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
+        >
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {feed ? "Refresh" : "Load Live Traffic Events"}
+        </button>
+      </div>
+
+      <div className="mt-4 text-xs text-muted-foreground" aria-live="polite">
+        {status === "idle" &&
+          "Load the latest official Transport Department events to generate verification examples."}
+        {status === "loading" && "Loading current Transport Department records..."}
+        {status === "success" &&
+          `${feed?.parsedRecordsAvailable ?? 0} Live ${
+            (feed?.parsedRecordsAvailable ?? 0) === 1 ? "Event" : "Events"
+          }`}
+        {status === "empty" && "No current TD Special Traffic News records are available."}
+        {status === "error" &&
+          "Current Transport Department records could not be loaded. You can still enter a traffic claim manually."}
+      </div>
+
+      {feed && status !== "error" && (
+        <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
+          <MiniMetric label="Official records retrieved" value={String(feed.recordsRetrieved)} />
+          <MiniMetric label="Parsed test records available" value={String(feed.parsedRecordsAvailable)} />
+          {feed.officialUpdatedAt && (
+            <MiniMetric label="Official update time" value={formatHongKongTime(feed.officialUpdatedAt)} />
+          )}
+          <MiniMetric label="Retrieved by VeriHK" value={formatHongKongTime(feed.retrievedAt)} />
+        </div>
+      )}
+
+      {records.length > 0 && (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {records.map((record) => (
+            <TrafficRecordButton
+              key={record.id}
+              record={record}
+              selected={record.id === selectedRecordId}
+              onSelect={() => onSelectRecord(record.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {selectedRecord && generatedClaims && (
+        <div className="mt-4 rounded-2xl border bg-muted/30 p-4">
+          <div className="text-xs font-medium text-muted-foreground">
+            Generated from the current official TD feed.
+          </div>
+          <fieldset className="mt-3">
+            <legend className="text-sm font-semibold">Verification example</legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                aria-pressed={claimType === "supported"}
+                onClick={() => onClaimTypeChange("supported")}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                  claimType === "supported" ? "bg-foreground text-background" : "bg-background"
+                }`}
+              >
+                ✓ Verify Official Claim
+              </button>
+              <button
+                type="button"
+                aria-pressed={claimType === "refuted"}
+                disabled={refutedDisabled}
+                onClick={() => onClaimTypeChange("refuted")}
+                className={`rounded-full border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:text-muted-foreground ${
+                  claimType === "refuted" ? "bg-foreground text-background" : "bg-background"
+                }`}
+              >
+                ✗ Generate Contradiction
+              </button>
+              <span className="rounded-full border bg-background px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+                ✎ Edit Manually
+              </span>
+            </div>
+          </fieldset>
+          <div className="mt-3 rounded-2xl border bg-background/70 p-3 text-sm leading-relaxed">
+            {selectedClaim ?? generatedClaims.refutedUnavailableReason}
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+            This example is derived from an official record so you can test the verification
+            workflow. The normal verification process will still retrieve and evaluate the live
+            source again.
+          </p>
+          <button
+            type="button"
+            disabled={!selectedClaim}
+            onClick={() =>
+              selectedClaim &&
+              selectedRecord &&
+              onUseClaim(selectedClaim, {
+                sourceRecordId: selectedRecord.id,
+                sourceOfficialUpdatedAt: selectedRecord.officialUpdatedAt,
+                sourceCurrentStatus: selectedRecord.currentStatus,
+                generatedClaimKind: claimType,
+                generatedSemanticField,
+                generatedAt: new Date().toISOString(),
+              })
+            }
+            className="mt-3 text-sm font-bold text-foreground transition-colors hover:text-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
+          >
+            Use this claim
+          </button>
+          {shouldShowTrafficGenerationDebug() && selectedRecord && (
+            <dl className="mt-3 grid gap-2 rounded-2xl border bg-background/60 p-3 text-xs sm:grid-cols-3">
+              <MiniMetric label="Source record ID" value={selectedRecord.id} />
+              <MiniMetric label="Record status used" value={selectedRecord.currentStatus ?? selectedRecord.serviceStatus ?? "Not stated"} />
+              <MiniMetric label="Generated semantic field" value={generatedSemanticField} />
+            </dl>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TrafficRecordButton({
+  record,
+  selected,
+  onSelect,
+}: {
+  record: TrafficTestRecord;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const fields = recordFields(record);
+  const eventLabel = getTrafficEventLabel(record);
+  const primaryLocation = record.roadName ?? record.routeOrLine ?? record.transportMode ?? record.title;
+  const secondaryLocation = getSecondaryTrafficLocation(record);
+  const updatedAt = record.officialUpdatedAt ? formatHongKongTime(record.officialUpdatedAt) : null;
+  const possiblyOutdated = record.freshness === "stale";
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`rounded-2xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        selected ? "border-foreground bg-background" : "bg-background/60 hover:border-foreground/40"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {eventLabel}
+          </div>
+          <div className="mt-1 break-words text-base font-semibold leading-snug">
+            {primaryLocation}
+          </div>
+          {secondaryLocation && (
+            <div className="mt-1 break-words text-sm text-muted-foreground">
+              {secondaryLocation}
+            </div>
+          )}
+        </div>
+        {selected && <span className="shrink-0 text-xs font-semibold">Selected</span>}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+        {record.cause && <span className="rounded-full border bg-background/70 px-2 py-1">{record.cause}</span>}
+        {record.currentStatus && (
+          <span className="rounded-full border bg-background/70 px-2 py-1">{record.currentStatus}</span>
+        )}
+        {record.scope && <span className="rounded-full border bg-background/70 px-2 py-1">{record.scope}</span>}
+        {updatedAt && <span className="rounded-full border bg-background/70 px-2 py-1">Updated {updatedAt}</span>}
+        {possiblyOutdated && (
+          <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-1 text-warning-foreground">
+            Possibly outdated
+          </span>
+        )}
+      </div>
+      {possiblyOutdated && updatedAt && (
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+          Last officially updated {updatedAt}. Verify again before relying on this event.
+        </p>
+      )}
+      <dl className="mt-3 grid gap-1.5 text-xs text-muted-foreground">
+        {fields.map((field) => (
+          <div key={field.label} className="grid gap-0.5 sm:grid-cols-[8rem_1fr]">
+            <dt>{field.label}</dt>
+            <dd className="break-words font-medium text-foreground/80">{field.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-3 text-xs font-bold text-foreground">Generate Verification</div>
+    </button>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border bg-background/60 p-3">
+      <div className="font-medium text-foreground">{value}</div>
+      <div className="mt-1 text-muted-foreground">{label}</div>
     </div>
   );
 }
 
-function FileDropZone({
-  accept,
-  icon,
-  title,
-  hint,
-  cta,
-}: {
-  accept: string;
-  icon: React.ReactNode;
-  title: string;
-  hint: string;
-  cta: string;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [dragOver, setDragOver] = useState(false);
+function shouldShowTrafficGenerationDebug(): boolean {
+  return import.meta.env.DEV || import.meta.env.VITE_SHOW_DEVELOPER_DETAILS === "true";
+}
 
-  const pick = () => inputRef.current?.click();
+function recordFields(record: TrafficTestRecord): Array<{ label: string; value: string }> {
+  return [
+    ["Road", record.roadName],
+    ["Direction", record.direction],
+    ["Nearby landmark", record.nearbyLandmark],
+    ["District", record.district],
+    ["Current status", record.currentStatus ?? record.serviceStatus],
+    ["Event type", record.eventType],
+    ["Cause", record.cause],
+    ["Scope", record.scope],
+    ["Transport mode", record.transportMode],
+    ["Route", record.routeOrLine],
+    ["Station or stop", record.stationOrStop],
+    [
+      "Official update",
+      record.officialUpdatedAt ? formatHongKongTime(record.officialUpdatedAt) : undefined,
+    ],
+  ]
+    .filter((field): field is [string, string] => typeof field[1] === "string" && field[1].trim() !== "")
+    .map(([label, value]) => ({ label, value }));
+}
 
-  const onFiles = (files: FileList | null) => {
-    if (files && files[0]) setFile(files[0]);
-  };
+function getTrafficEventLabel(record: TrafficTestRecord): string {
+  if (record.eventType === "traffic_congestion") return "Busy Traffic";
+  if (record.currentStatus === "reopened" || record.eventType === "road_reopened") return "Reopened";
+  if (record.eventType === "lane_closure") return "Lane Closure";
+  if (record.eventType === "road_closure") return "Road Closure";
+  if (record.eventType?.startsWith("public_transport")) return "Public Transport Update";
+  return record.eventType ? titleFromToken(record.eventType) : "Traffic Event";
+}
 
-  if (file) {
-    const kb = (file.size / 1024).toFixed(1);
-    const size =
-      file.size > 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${kb} KB`;
-    return (
-      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-success/30 bg-success/5 p-5">
-        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-success/15 text-success">
-          <CheckCircle2 className="h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">{file.name}</div>
-          <div className="text-xs text-muted-foreground">Selected · {size} · ready to analyze</div>
-        </div>
-        <button
-          type="button"
-          className="text-sm font-bold text-muted-foreground transition-colors hover:text-foreground"
-          onClick={() => setFile(null)}
-        >
-          Remove
-        </button>
+function getSecondaryTrafficLocation(record: TrafficTestRecord): string | null {
+  if (record.nearbyLandmark) return `Near ${record.nearbyLandmark}`;
+  if (record.stationOrStop) return `Near ${record.stationOrStop}`;
+  if (record.direction) return record.direction;
+  return null;
+}
 
-      </div>
-    );
-  }
-
-  return (
-    <label
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragOver(true);
-      }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDragOver(false);
-        onFiles(e.dataTransfer.files);
-      }}
-      className={`group flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-12 text-center transition-colors ${
-        dragOver
-          ? "border-primary/60 bg-primary/5"
-          : "border-border/70 bg-background/40 hover:border-primary/50 hover:bg-primary/5"
-      }`}
-    >
-      <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary transition-transform group-hover:scale-105">
-        <UploadCloud className="h-6 w-6" />
-      </div>
-      <div className="space-y-1">
-        <div className="text-base font-semibold">{title}</div>
-        <div className="text-xs text-muted-foreground">{hint}</div>
-      </div>
-      <button
-        type="button"
-        onClick={pick}
-        className="text-base font-bold text-foreground transition-colors hover:text-primary"
-      >
-        {cta}
-      </button>
-
-      <input
-        ref={inputRef}
-        type="file"
-        accept={accept}
-        className="hidden"
-        onChange={(e) => onFiles(e.target.files)}
-      />
-    </label>
-  );
+function titleFromToken(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }

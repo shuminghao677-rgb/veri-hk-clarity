@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ExternalLink, Landmark } from "lucide-react";
 import { officialSources } from "@/lib/mock-data";
 import { SourceIcon } from "@/components/verihk/SourceIcon";
+import { PageFrame, PageHeader, Reveal } from "@/components/verihk/PageChrome";
 
 
 export const Route = createFileRoute("/_app/sources")({
@@ -17,22 +18,15 @@ export const Route = createFileRoute("/_app/sources")({
 
 function SourcesPage() {
   return (
-    <div className="premium-container py-10 md:py-16">
-      <div className="mb-12 max-w-3xl">
-        <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[rgb(8_23_45_/_42%)]">
-          <Landmark className="h-3.5 w-3.5" />
-          Official source graph
-        </div>
-        <h1 className="mt-5 text-4xl font-semibold tracking-normal text-[rgb(8_23_45_/_90%)] md:text-6xl">
-          The trusted layer underneath every report.
-        </h1>
-        <p className="mt-4 text-base leading-7 text-[rgb(8_23_45_/_58%)]">
-          VeriHK uses official government endpoints and feeds where available. The verification
-          engine decides how each source contributes to the report.
-        </p>
-      </div>
+    <PageFrame>
+      <PageHeader
+        eyebrow="Official source graph"
+        icon={<Landmark className="h-3.5 w-3.5" />}
+        title="The trusted layer underneath every report."
+        description="VeriHK uses official government endpoints and feeds where available. The verification engine decides how each source contributes to the report."
+      />
 
-      <div className="border-y border-[rgb(8_23_45_/_12%)]">
+      <Reveal className="border-y border-[rgb(8_23_45_/_12%)]">
         <div className="hidden grid-cols-[1.1fr_0.7fr_1.4fr_auto] gap-6 border-b border-[rgb(8_23_45_/_10%)] py-3 text-xs font-semibold uppercase tracking-[0.16em] text-[rgb(8_23_45_/_42%)] md:grid">
           <div>Source</div>
           <div>Type</div>
@@ -66,7 +60,7 @@ function SourcesPage() {
 
           </div>
         ))}
-      </div>
-    </div>
+      </Reveal>
+    </PageFrame>
   );
 }

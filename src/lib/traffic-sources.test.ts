@@ -1,3 +1,4 @@
+import { describe, it } from "vitest";
 import type { PhaseOneClaim, PhaseOneEvidence } from "./report-contract";
 import { retrieveLiveEvidence } from "./live-sources";
 import {
@@ -68,6 +69,12 @@ export async function runTrafficSourceTests(): Promise<void> {
   testHtmlEntitiesDecoded();
   testAtMostThreeEvidenceItems();
 }
+
+describe("traffic sources", () => {
+  it("parses and verifies Transport Department evidence", async () => {
+    await runTrafficSourceTests();
+  });
+});
 
 function testExactRoadClosureMatch(): void {
   const result = evaluateTrafficClaimWithSources(

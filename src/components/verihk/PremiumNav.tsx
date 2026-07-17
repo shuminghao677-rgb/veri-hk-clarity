@@ -4,7 +4,6 @@ const navItems = [
 
   { label: "Story", to: "/" },
   { label: "Verify", to: "/verify" },
-  { label: "Dashboard", to: "/dashboard" },
   { label: "History", to: "/history" },
   { label: "Sources", to: "/sources" },
   { label: "About", to: "/about" },
@@ -17,7 +16,9 @@ export function PremiumNav() {
     <header className="sticky top-0 z-40 border-b border-[rgb(8_23_45_/_10%)] bg-white/85 backdrop-blur-[18px]">
       <div className="premium-container flex h-14 items-center gap-3">
         <Link to="/" className="flex shrink-0 items-center gap-2">
-          <span className="text-sm font-semibold text-[rgb(8_23_45_/_88%)]">VeriHK</span>
+          <span className="text-[15px] font-medium tracking-[-0.01em] text-[rgb(8_23_45_/_92%)]">
+            VeriHK
+          </span>
         </Link>
 
 
@@ -42,7 +43,7 @@ export function PremiumNav() {
 
         <Link
           to="/verify"
-          className="ml-auto text-sm font-bold text-foreground transition-colors hover:text-primary md:ml-3"
+          className="ml-auto inline-flex items-center border-b border-[rgb(8_23_45_/_18%)] pb-0.5 text-sm font-medium text-foreground transition-colors hover:border-[#0878f9] hover:text-primary md:ml-3"
         >
           Start Verification
         </Link>

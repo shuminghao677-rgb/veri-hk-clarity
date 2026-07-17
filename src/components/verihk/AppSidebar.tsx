@@ -1,6 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  LayoutDashboard,
   ScanSearch,
   History,
   Library,
@@ -23,7 +22,6 @@ import {
 import { Logo } from "./Logo";
 
 const items = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Verify", url: "/verify", icon: ScanSearch },
   { title: "History", url: "/history", icon: History },
   { title: "Official Sources", url: "/sources", icon: Library },

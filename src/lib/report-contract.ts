@@ -1,9 +1,17 @@
 export type AnalysisType = "preliminary_ai_analysis";
 export type EvidenceCoverage = "none" | "low" | "medium" | "high";
 export type ReportVerdict = "supported" | "refuted" | "insufficient_evidence";
+export type VerificationMode = "auto" | "weather" | "traffic";
 
 export type OfficialSourceKey = "hko" | "td" | "edb" | "govnews";
 export type SourceFreshness = "fresh" | "stale" | "unavailable";
+export type StructuredFactValue =
+  | string
+  | number
+  | boolean
+  | null
+  | StructuredFactValue[]
+  | { [key: string]: StructuredFactValue };
 
 export interface PhaseOneEvidence {
   id: string;
@@ -27,6 +35,7 @@ export interface PhaseOneEvidence {
   updated_at: string | null;
   retrieved_at: string;
   freshness: SourceFreshness;
+  structured_facts?: Record<string, StructuredFactValue>;
   traffic_metadata?: TrafficEvidenceMetadata;
 }
 
@@ -90,14 +99,43 @@ export interface PhaseOneReport {
     unique_relevant_evidence_records?: number;
     claim_evidence_links?: number;
   };
+  diagnostics?: VerificationDiagnostics;
   claims: PhaseOneClaim[];
 }
 
 export interface AnalyzeTextInput {
   text: string;
+  mode?: VerificationMode;
+  trafficGenerationMetadata?: TrafficGenerationMetadata;
+}
+
+export interface TrafficGenerationMetadata {
+  sourceRecordId: string;
+  sourceOfficialUpdatedAt?: string;
+  sourceCurrentStatus?: string;
+  generatedClaimKind: "supported" | "refuted";
+  generatedSemanticField: string;
+  generatedAt: string;
+}
+
+export interface VerificationDiagnostics {
+  mode: VerificationMode;
+  routedSource: "HKO" | "TD";
+  endpointLabel: string;
+  recordsRetrieved: number;
+  relevantEvidence: number;
+  parsingStatus: "success" | "partial" | "failed";
+  matchingStatus: "matched" | "no_match";
+  deterministicResult: ReportVerdict;
+  adjudicatorCalled: boolean;
+  freshness?: "fresh" | "stale";
+  officialUpdatedAt?: string;
 }
 
 export const PENDING_INPUT_KEY = "verihk:pending-input";
+export const PENDING_VERIFICATION_MODE_KEY = "verihk:verification-mode";
+export const PENDING_TRAFFIC_GENERATION_METADATA_KEY =
+  "verihk:traffic-generation-metadata";
 export const LATEST_REPORT_KEY = "verihk:latest-report";
 export const MAX_ANALYSIS_INPUT_CHARS = 8000;
 

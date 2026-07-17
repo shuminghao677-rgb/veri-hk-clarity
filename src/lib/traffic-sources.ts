@@ -5,6 +5,7 @@ import type {
   PhaseOneEvidence,
   ReportVerdict,
   SourceFreshness,
+  TrafficGenerationMetadata,
 } from "./report-contract";
 import {
   buildTrafficScopePhrase,
@@ -63,7 +64,7 @@ type TrafficEntity = {
   landmarks: string[];
   closureScope: ClosureScope;
   currentStatus: TrafficCurrentStatus;
-  cause?: string;
+  cause?: TrafficCause | string;
   eventTypes: TrafficEvidenceCategory[];
   transportMode?: NonNullable<PhaseOneEvidence["traffic_metadata"]>["transport_mode"];
   routeOrLine?: string;
@@ -72,6 +73,16 @@ type TrafficEntity = {
   isFuture: boolean;
   isCurrent: boolean;
 };
+
+export type TrafficCause =
+  | "traffic_accident"
+  | "road_works"
+  | "vehicle_breakdown"
+  | "police_operation"
+  | "special_event"
+  | "flooding"
+  | "landslide"
+  | "unknown";
 
 type ClosureScope =
   | "unknown"
@@ -248,6 +259,7 @@ export async function retrieveTrafficEvidence(
 export function evaluateTrafficClaimWithSources(
   claim: PhaseOneClaim,
   snapshot: TrafficSourceSnapshot | undefined,
+  generationMetadata?: TrafficGenerationMetadata,
 ): TrafficEvaluation {
   const category = classifyTrafficClaim(claim.text);
   if (category === "non_traffic") {
@@ -264,13 +276,18 @@ export function evaluateTrafficClaimWithSources(
 
   const source = snapshot ?? emptyTrafficSnapshot();
   if (!source.freshness.some((item) => item.freshness === "fresh")) {
+    const freshnessState = getTrafficFreshnessState(source);
     return withTrafficVerdict(
       claim,
       "insufficient_evidence",
       [],
       0.45,
-      "The selected live Transport Department sources were unavailable or stale.",
-      "Retry later or check the Transport Department source directly.",
+      freshnessState === "stale_with_records"
+        ? "The latest retrieved Transport Department update may be outdated."
+        : "The Transport Department source could not be retrieved.",
+      freshnessState === "stale_with_records"
+        ? "Verify again before relying on this event, or check the Transport Department source directly."
+        : "Retry later or check the Transport Department source directly.",
       "none",
     );
   }
@@ -291,7 +308,7 @@ export function evaluateTrafficClaimWithSources(
     .slice(0, 3);
   const evidence = scored.map(({ item, score }) => ({ ...item, relevance_score: score }));
 
-  return buildTrafficVerdict(claim, category, scored, evidence);
+  return buildTrafficVerdict(claim, category, scored, evidence, source, generationMetadata);
 }
 
 export function getTrafficCandidateDebugReport(
@@ -362,6 +379,10 @@ async function getCachedCurrentTraffic(): Promise<TrafficSourceSnapshot> {
   const value = await fetchCurrentTraffic();
   currentTrafficCache = { expiresAt: Date.now() + TRAFFIC_CACHE_MS, value };
   return value;
+}
+
+export async function retrieveCurrentTrafficSnapshot(): Promise<TrafficSourceSnapshot> {
+  return getCachedCurrentTraffic();
 }
 
 async function getCachedPlannedTraffic(): Promise<TrafficSourceSnapshot> {
@@ -629,6 +650,8 @@ function buildTrafficVerdict(
   category: TrafficClaimCategory,
   scored: ScoredEvidence[],
   evidence: PhaseOneEvidence[],
+  source?: TrafficSourceSnapshot,
+  generationMetadata?: TrafficGenerationMetadata,
 ): TrafficEvaluation {
   const best = scored[0];
   const bestCategory = best?.category;
@@ -729,6 +752,41 @@ function buildTrafficVerdict(
   }
 
   if (category === "traffic_congestion" && bestCategory === "traffic_congestion") {
+    const causeAssessment = assessTrafficCauseForClaim(claim, evidence[0] ?? best.item);
+    if (causeAssessment.status === "missing") {
+      return withTrafficVerdict(
+        claim,
+        "insufficient_evidence",
+        evidence,
+        0.66,
+        `The claim attributes the disruption to ${causeAssessment.claimCauseLabel}, but the matched Transport Department notice does not state a reliable cause. More evidence is required.`,
+        "Check the latest Transport Department update before relying on the claimed cause.",
+        "low",
+      );
+    }
+    if (causeAssessment.status === "conflict") {
+      return withTrafficVerdict(
+        claim,
+        "refuted",
+        evidence,
+        0.82,
+        `The claim attributes the busy traffic to ${causeAssessment.claimCauseLabel}, but the latest Transport Department notice states that it is due to ${causeAssessment.evidenceCauseLabel}. Therefore, the claim is refuted.`,
+        "Use the cause stated in the latest Transport Department update.",
+        "high",
+      );
+    }
+    if (causeAssessment.status === "match") {
+      return withTrafficVerdict(
+        claim,
+        "supported",
+        evidence,
+        0.84,
+        `The latest Transport Department notice states that the busy traffic on ${causeAssessment.locationLabel} is due to ${causeAssessment.evidenceCauseLabel}. Therefore, the claim is supported.`,
+        "Check the latest Transport Department update before travelling.",
+        "high",
+      );
+    }
+
     return withTrafficVerdict(
       claim,
       "supported",
@@ -936,10 +994,37 @@ function buildTrafficVerdict(
     "insufficient_evidence",
     evidence,
     evidence.length ? 0.68 : 0.58,
-    "The selected live Transport Department sources were checked, but no directly matching current notice was found. Absence from the feed does not prove the road is open.",
+    getTrafficNoMatchExplanation(source, generationMetadata),
     "Check the latest Transport Department Special Traffic News or Traffic Notices before acting on this claim.",
     evidence.length ? "medium" : "low",
   );
+}
+
+function getTrafficFreshnessState(
+  source: TrafficSourceSnapshot,
+): "stale_with_records" | "unavailable_or_empty" {
+  const hasRecords = source.itemsFetched > 0 || source.evidence.length > 0;
+  const stale = source.freshness.some((item) => item.freshness === "stale");
+  return hasRecords && stale ? "stale_with_records" : "unavailable_or_empty";
+}
+
+function getTrafficNoMatchExplanation(
+  source: TrafficSourceSnapshot | undefined,
+  generationMetadata: TrafficGenerationMetadata | undefined,
+): string {
+  if (generationMetadata && source) {
+    const recordExists = source.evidence.some((item) => item.id === generationMetadata.sourceRecordId);
+    if (!recordExists) {
+      return "The official event used to create this example was not present in the latest Transport Department feed. The event may have been updated, resolved or removed between generation and verification.";
+    }
+    return "The official event used to create this example is still present in the latest Transport Department feed, but it did not semantically match the full submitted claim.";
+  }
+
+  if ((source?.itemsFetched ?? 0) > 0 || (source?.evidence.length ?? 0) > 0) {
+    return "The Transport Department feed was retrieved successfully, but no directly relevant current record matched this claim.";
+  }
+
+  return "The selected live Transport Department sources were checked, but no directly matching current notice was found. Absence from the feed does not prove the road is open.";
 }
 
 function scoreTrafficEvidenceForClaim(
@@ -1048,6 +1133,77 @@ function scoreTrafficEvidenceForClaim(
       contradictionDecision: getTrafficContradictionDecision(claimCategory, evidenceCategory),
     },
   };
+}
+
+type TrafficCauseAssessment =
+  | { status: "none" }
+  | {
+      status: "match" | "conflict" | "missing";
+      claimCause: TrafficCause;
+      evidenceCause?: TrafficCause;
+      claimCauseLabel: string;
+      evidenceCauseLabel?: string;
+      locationLabel: string;
+    };
+
+function assessTrafficCauseForClaim(
+  claim: PhaseOneClaim,
+  evidence: PhaseOneEvidence,
+): TrafficCauseAssessment {
+  const claimCause = extractTrafficEntities(claim.text).cause;
+  if (!isKnownTrafficCause(claimCause)) return { status: "none" };
+
+  const evidenceCause = normalizeTrafficCause(evidence.traffic_metadata?.cause) ??
+    normalizeTrafficCause(extractTrafficEntities(`${evidence.excerpt ?? ""} ${evidence.summary}`).cause);
+  const locationLabel = buildTrafficCauseLocationLabel(evidence);
+  const claimCauseLabel = trafficCauseLabel(claimCause);
+
+  if (!evidenceCause || evidenceCause === "unknown") {
+    return { status: "missing", claimCause, claimCauseLabel, locationLabel };
+  }
+
+  const evidenceCauseLabel = trafficCauseLabel(evidenceCause);
+  if (claimCause !== evidenceCause) {
+    return {
+      status: "conflict",
+      claimCause,
+      evidenceCause,
+      claimCauseLabel,
+      evidenceCauseLabel,
+      locationLabel,
+    };
+  }
+
+  return {
+    status: "match",
+    claimCause,
+    evidenceCause,
+    claimCauseLabel,
+    evidenceCauseLabel,
+    locationLabel,
+  };
+}
+
+function isKnownTrafficCause(value: string | undefined): value is TrafficCause {
+  return (
+    value === "traffic_accident" ||
+    value === "road_works" ||
+    value === "vehicle_breakdown" ||
+    value === "police_operation" ||
+    value === "special_event" ||
+    value === "flooding" ||
+    value === "landslide" ||
+    value === "unknown"
+  );
+}
+
+function buildTrafficCauseLocationLabel(evidence: PhaseOneEvidence): string {
+  const metadata = evidence.traffic_metadata;
+  if (metadata?.road_name && metadata.nearby_landmark) {
+    return `${metadata.road_name} near ${metadata.nearby_landmark}`;
+  }
+  if (metadata?.road_name) return metadata.road_name;
+  return "the matched location";
 }
 
 function scorePublicTransportEvidenceForClaim(
@@ -1203,20 +1359,48 @@ function extractPublicTransportEntities(normalized: string): {
 }
 
 function isPublicTransportText(normalized: string): boolean {
+  const roadEvent = hasRoadTrafficSubject(normalized);
+  const publicTransportOperation = hasPublicTransportOperationalLanguage(normalized);
+  if (roadEvent && !publicTransportOperation) return false;
+  return publicTransportOperation;
+}
+
+function hasRoadTrafficSubject(normalized: string): boolean {
+  return /\b(road|rd|lane|lanes|carriageway|tunnel|flyover|bridge|closed to traffic|re opened to all traffic|reopened to all traffic|motorists|vehicular traffic|vehicles|traffic is busy|traffic queue)\b/.test(
+    normalized,
+  );
+}
+
+function hasPublicTransportOperationalLanguage(normalized: string): boolean {
   return (
-    /\b(?:mtr|train|railway|rail|station|bus|minibus|ferry|tram|public transport)\b/.test(
+    /\b(?:mtr|train|railway|rail|bus|minibus|ferry|tram|public transport)\s+(?:service|services|operation|operations)\b/.test(
       normalized,
     ) ||
-    /\bdisruption\b.*\b(caused by|cause|technical fault)\b/.test(normalized) ||
-    /\b[a-z0-9]+(?:\s+[a-z0-9]+){0,5}\s+line\b/.test(normalized) ||
-    /\b(?:route|service)\s+[a-z0-9]+\b/.test(normalized)
+    /\b(?:train|rail|railway|mtr)\s+service\s+(?:is\s+)?(?:suspended|disrupted|delayed|resumed|normal|affected)\b/.test(
+      normalized,
+    ) ||
+    /\b(?:service|services)\s+(?:on|of)\s+(?:the\s+)?[a-z0-9]+(?:\s+[a-z0-9]+){0,5}\s+line\b/.test(
+      normalized,
+    ) ||
+    /\b[a-z0-9]+(?:\s+[a-z0-9]+){0,5}\s+line\s+(?:service|services)\b/.test(
+      normalized,
+    ) ||
+    /\b[a-z0-9]+(?:\s+[a-z0-9]+){0,5}\s+line\s+(?:is\s+)?(?:operating normally|running normally|normal service|suspended|disrupted|delayed|resumed)\b/.test(
+      normalized,
+    ) ||
+    /\bstation\s+(?:closed|closure|service|services|passenger|passengers)\b/.test(normalized) ||
+    /\bplatform\s+(?:closed|closure|service|services)\b/.test(normalized) ||
+    /\b(?:headway|service frequency|passenger service|train frequency)\b/.test(normalized) ||
+    /\bservice disruption\b.*\b(?:mtr|train|railway|rail|line|station|technical fault)\b/.test(
+      normalized,
+    )
   );
 }
 
 function detectTransportMode(
   normalized: string,
 ): NonNullable<PhaseOneEvidence["traffic_metadata"]>["transport_mode"] {
-  if (/\b(?:mtr|train|railway|rail|station)\b|\b[a-z0-9]+(?:\s+[a-z0-9]+){0,5}\s+line\b/.test(normalized)) {
+  if (/\b(?:mtr|train|railway|rail)\b|\b[a-z0-9]+(?:\s+[a-z0-9]+){0,5}\s+line\b/.test(normalized)) {
     return "MTR";
   }
   if (/\bminibus\b/.test(normalized)) return "minibus";
@@ -1375,6 +1559,9 @@ function trimLandmarkNoise(value: string): string {
 }
 
 function extractClosureScope(normalized: string): ClosureScope {
+  if (/(part\s+of\s+(?:the\s+)?(?:[a-z]+\s+bound\s+)?lanes?|partially\s+closed|partial\s+closure|part\s+of\s+(?:the\s+)?road)/.test(normalized)) {
+    return "partial";
+  }
   if (/(entire|whole)\s+road|complete(?:ly)?\s+closed|road\s+closed\s+to\s+all\s+traffic|closed\s+to\s+all\s+traffic/.test(normalized)) {
     return "complete_road";
   }
@@ -1386,9 +1573,6 @@ function extractClosureScope(normalized: string): ClosureScope {
   }
   if (/(some|several)\s+lanes/.test(normalized)) {
     return "some_lanes";
-  }
-  if (/(part\s+of\s+(?:the\s+)?(?:[a-z]+\s+bound\s+)?lanes?|partially\s+closed|partial\s+closure|part\s+of\s+(?:the\s+)?road)/.test(normalized)) {
-    return "partial";
   }
   return "unknown";
 }
@@ -1417,6 +1601,9 @@ function detectTrafficEventState(text: string): TrafficEventState {
     /\bare re opened\b/g,
     /\bhas reopened\b/g,
     /\bhave reopened\b/g,
+    /\bhas been reopened\b/g,
+    /\bhave been reopened\b/g,
+    /\bbeen reopened\b/g,
     /\breopened to all traffic\b/g,
     /\bre opened to all traffic\b/g,
     /\bre opened\b/g,
@@ -1450,15 +1637,72 @@ function collectStateMatches(
   );
 }
 
-function extractTrafficCause(normalized: string): string | undefined {
+function extractTrafficCause(normalized: string): TrafficCause | string | undefined {
   if (/\btrain technical fault\b/.test(normalized)) return "train technical fault";
   if (/\btechnical fault\b/.test(normalized)) return "technical fault";
-  if (/\bvehicle breakdown\b/.test(normalized)) return "vehicle breakdown";
-  if (/\btraffic accident\b/.test(normalized)) return "traffic accident";
+  const direct = normalizeTrafficCause(normalized);
+  if (direct) return direct;
   const match = normalized.match(/\bdue to\s+([a-z0-9]+(?:\s+[a-z0-9]+){0,4})/);
   if (!match) return undefined;
   const cause = trimCauseNoise(match[1]);
-  return cause || undefined;
+  return normalizeTrafficCause(cause) ?? undefined;
+}
+
+export function normalizeTrafficCause(value: string | undefined | null): TrafficCause | undefined {
+  if (!value) return undefined;
+  const normalized = normalizeComparableText(value);
+  if (
+    /\b(traffic accident|road traffic accident|accident|collision|crash)\b/.test(normalized)
+  ) {
+    return "traffic_accident";
+  }
+  if (
+    /\b(road works|roadwork|roadworks|maintenance works|road maintenance|resurfacing works)\b/.test(
+      normalized,
+    )
+  ) {
+    return "road_works";
+  }
+  if (/\b(vehicle breakdown|broken down vehicle|stalled vehicle)\b/.test(normalized)) {
+    return "vehicle_breakdown";
+  }
+  if (/\b(police operation|police investigation)\b/.test(normalized)) {
+    return "police_operation";
+  }
+  if (/\b(special event|public event|parade|procession)\b/.test(normalized)) {
+    return "special_event";
+  }
+  if (/\b(flooding|flood|water accumulation)\b/.test(normalized)) return "flooding";
+  if (/\b(landslide|slope failure)\b/.test(normalized)) return "landslide";
+  return undefined;
+}
+
+function trafficCauseLabel(cause: TrafficCause): string {
+  if (cause === "traffic_accident") return "a traffic accident";
+  if (cause === "road_works") return "road works";
+  if (cause === "vehicle_breakdown") return "a vehicle breakdown";
+  if (cause === "police_operation") return "a police operation";
+  if (cause === "special_event") return "a special event";
+  if (cause === "flooding") return "flooding";
+  if (cause === "landslide") return "a landslide";
+  return "an unknown cause";
+}
+
+function trafficCauseTitle(cause: TrafficCause): string {
+  if (cause === "traffic_accident") return "Traffic Accident";
+  if (cause === "road_works") return "Road Works";
+  if (cause === "vehicle_breakdown") return "Vehicle Breakdown";
+  if (cause === "police_operation") return "Police Operation";
+  if (cause === "special_event") return "Special Event";
+  if (cause === "flooding") return "Flooding";
+  if (cause === "landslide") return "Landslide";
+  return "Unknown";
+}
+
+function formatTrafficCauseForMetadata(cause: string | undefined): string | undefined {
+  if (!cause) return undefined;
+  const normalized = normalizeTrafficCause(cause);
+  return normalized ? trafficCauseTitle(normalized) : titleCase(cause);
 }
 
 function trimCauseNoise(value: string): string {
@@ -1928,7 +2172,7 @@ function buildTrafficEvidenceMetadata(
     event_type: category ?? undefined,
     scope: entities.closureScope !== "unknown" ? closureScopeCode(entities.closureScope) : undefined,
     current_status: entities.currentStatus !== "unknown" ? entities.currentStatus : undefined,
-    cause: entities.cause ? titleCase(entities.cause) : undefined,
+    cause: formatTrafficCauseForMetadata(entities.cause),
     map_location_key: getTrafficMapLocationKey(primaryRoad, nearbyLandmark),
   };
 }
@@ -1964,7 +2208,7 @@ function buildStructuredTrafficMetadata(
       station_or_stop: contentEntities.stationOrStop
         ? titleCase(contentEntities.stationOrStop)
         : undefined,
-      cause: contentEntities.cause ? titleCase(contentEntities.cause) : undefined,
+      cause: formatTrafficCauseForMetadata(contentEntities.cause),
       latitude: officialCoordinates?.latitude,
       longitude: officialCoordinates?.longitude,
       coordinate_source: officialCoordinates ? "Official TD coordinates" : undefined,
@@ -2001,7 +2245,9 @@ function buildStructuredTrafficMetadata(
         : fallback?.scope,
     current_status:
       entities.currentStatus !== "unknown" ? entities.currentStatus : fallback?.current_status,
-    cause: incident.detail ? titleCase(normalizeText(incident.detail)) : fallback?.cause,
+    cause: incident.detail
+      ? formatTrafficCauseForMetadata(normalizeTrafficCause(incident.detail) ?? normalizeText(incident.detail))
+      : fallback?.cause,
     latitude: officialCoordinates?.latitude,
     longitude: officialCoordinates?.longitude,
     coordinate_source: officialCoordinates ? "Official TD coordinates" : undefined,
@@ -2025,7 +2271,7 @@ function buildPublicTransportMetadata(
     station_or_stop: entities.stationOrStop ? titleCase(entities.stationOrStop) : undefined,
     event_type: category ?? "public_transport_disruption",
     service_status: entities.serviceStatus ?? "unknown",
-    cause: entities.cause ? titleCase(entities.cause) : undefined,
+    cause: formatTrafficCauseForMetadata(entities.cause),
   };
 }
 

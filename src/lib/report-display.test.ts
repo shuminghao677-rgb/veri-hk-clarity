@@ -1,10 +1,20 @@
+import { describe, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
+  buildLiveSourceSummary,
   buildTrafficScopePhrase,
   buildTransportVerdictExplanation,
   getEvidenceItemText,
+  getLiveSourceMatchingText,
+  getRetrievedVsMatchedSentence,
 } from "./report-display";
-import type { PhaseOneClaim, PhaseOneEvidence, ReportVerdict, TrafficEvidenceMetadata } from "./report-contract";
+import type {
+  PhaseOneClaim,
+  PhaseOneEvidence,
+  PhaseOneReport,
+  ReportVerdict,
+  TrafficEvidenceMetadata,
+} from "./report-contract";
 
 export function runReportDisplayTests(): void {
   testHongChongReopeningRefutesClosure();
@@ -23,7 +33,21 @@ export function runReportDisplayTests(): void {
   testInsufficientEvidenceDoesNotInventLocation();
   testProductionDisplayHelpersHaveNoCompetitionRoadLiterals();
   testEvidenceCountGrammar();
+  testTrafficLiveSourceSummarySeparatesRetrievedAndMatched();
+  testTrafficLiveSourceSummaryMatchedWording();
+  testWeatherLiveSourceSummary();
+  testAutoDetectLiveSourceSummaryUsesRoutedSource();
+  testReportWithoutDiagnosticsUsesSafeFallback();
+  testLiveSourceSummaryDoesNotEmitUndefinedFields();
+  testResultsPageDeveloperDetailsVisibilityCondition();
+  testInsightsPieTooltipRemoved();
 }
+
+describe("report display", () => {
+  it("formats evidence and transport explanations", () => {
+    runReportDisplayTests();
+  });
+});
 
 function testHongChongReopeningRefutesClosure(): void {
   const explanation = buildTransportVerdictExplanation({
@@ -269,6 +293,192 @@ function testProductionDisplayHelpersHaveNoCompetitionRoadLiterals(): void {
 function testEvidenceCountGrammar(): void {
   assertEqual(getEvidenceItemText(1), "Retrieved 1 relevant official evidence item.", "singular");
   assertEqual(getEvidenceItemText(2), "Retrieved 2 relevant official evidence items.", "plural");
+}
+
+function testTrafficLiveSourceSummarySeparatesRetrievedAndMatched(): void {
+  const summary = buildLiveSourceSummary(reportWithDiagnostics({
+    mode: "traffic",
+    routedSource: "TD",
+    endpointLabel: "TD Special Traffic News XML",
+    recordsRetrieved: 1,
+    relevantEvidence: 0,
+    parsingStatus: "success",
+    matchingStatus: "no_match",
+    deterministicResult: "insufficient_evidence",
+    adjudicatorCalled: false,
+    freshness: "fresh",
+    officialUpdatedAt: "2026-07-17T09:07:00.000Z",
+  }));
+
+  assertEqual(summary?.officialSource, "Transport Department", "traffic source label");
+  assertEqual(summary?.recordsRetrieved, 1, "records retrieved");
+  assertEqual(summary?.relevantRecordsMatched, 0, "relevant records matched");
+  assertEqual(
+    summary?.matchingResult,
+    "No directly relevant current record was matched.",
+    "neutral no-match wording",
+  );
+  assertEqual(
+    getRetrievedVsMatchedSentence(1, 0),
+    "1 official record was retrieved, but no directly relevant current record was matched to this claim.",
+    "retrieved-vs-matched sentence",
+  );
+}
+
+function testTrafficLiveSourceSummaryMatchedWording(): void {
+  assertEqual(
+    getLiveSourceMatchingText(
+      {
+        mode: "traffic",
+        routedSource: "TD",
+        endpointLabel: "TD Special Traffic News XML",
+        recordsRetrieved: 1,
+        relevantEvidence: 1,
+        parsingStatus: "success",
+        matchingStatus: "matched",
+        deterministicResult: "supported",
+        adjudicatorCalled: false,
+      },
+      1,
+    ),
+    "Relevant official evidence matched.",
+    "matched wording",
+  );
+}
+
+function testWeatherLiveSourceSummary(): void {
+  const summary = buildLiveSourceSummary(reportWithDiagnostics({
+    mode: "weather",
+    routedSource: "HKO",
+    endpointLabel: "HKO Current Warning Summary",
+    recordsRetrieved: 1,
+    relevantEvidence: 1,
+    parsingStatus: "success",
+    matchingStatus: "matched",
+    deterministicResult: "supported",
+    adjudicatorCalled: false,
+    freshness: "fresh",
+  }));
+
+  assertEqual(summary?.mode, "Weather", "weather mode label");
+  assertEqual(summary?.officialSource, "Hong Kong Observatory", "weather source label");
+  assertEqual(summary?.endpoint, "HKO Current Warning Summary", "weather endpoint");
+}
+
+function testAutoDetectLiveSourceSummaryUsesRoutedSource(): void {
+  const summary = buildLiveSourceSummary(reportWithDiagnostics({
+    mode: "auto",
+    routedSource: "TD",
+    endpointLabel: "TD Special Traffic News XML",
+    recordsRetrieved: 2,
+    relevantEvidence: 1,
+    parsingStatus: "success",
+    matchingStatus: "matched",
+    deterministicResult: "supported",
+    adjudicatorCalled: false,
+  }));
+
+  assertEqual(summary?.mode, "Auto Detect", "auto mode label");
+  assertEqual(summary?.officialSource, "Transport Department", "uses recorded routed source");
+}
+
+function testReportWithoutDiagnosticsUsesSafeFallback(): void {
+  const summary = buildLiveSourceSummary({
+    ...baseReport(),
+    diagnostics: undefined,
+    retrieval_counts: {
+      official_sources_queried: 1,
+      feed_items_fetched: 1,
+      relevant_evidence_attached: 0,
+    },
+    source_freshness: [
+      {
+        source_key: "td",
+        source_name: "Transport Department",
+        freshness: "fresh",
+        retrieved_at: "2026-07-17T09:00:00.000Z",
+        updated_at: null,
+        message: "Fetched latest Transport Department item.",
+      },
+    ],
+  });
+
+  assertEqual(summary?.officialSource, "Transport Department", "fallback source");
+  assertEqual(summary?.recordsRetrieved, 1, "fallback records retrieved");
+  assertEqual(summary?.relevantRecordsMatched, 0, "fallback matched records");
+}
+
+function testLiveSourceSummaryDoesNotEmitUndefinedFields(): void {
+  const summary = buildLiveSourceSummary(reportWithDiagnostics({
+    mode: "traffic",
+    routedSource: "TD",
+    endpointLabel: "TD Special Traffic News XML",
+    recordsRetrieved: 1,
+    relevantEvidence: 0,
+    parsingStatus: "success",
+    matchingStatus: "no_match",
+    deterministicResult: "insufficient_evidence",
+    adjudicatorCalled: false,
+  }));
+
+  const values = [
+    summary?.mode,
+    summary?.officialSource,
+    summary?.endpoint,
+    summary?.matchingResult,
+    ...(summary?.developerFields.map((field) => field.value) ?? []),
+  ];
+  if (values.some((value) => value === undefined || value === "undefined")) {
+    throw new Error("summary should not emit undefined values");
+  }
+}
+
+function testResultsPageDeveloperDetailsVisibilityCondition(): void {
+  const source = readFileSync("src/routes/_app.results.tsx", "utf8");
+  assertIncludes(source, "VITE_SHOW_DEVELOPER_DETAILS", "has developer details env flag");
+  assertIncludes(source, "import.meta.env.DEV", "has dev visibility condition");
+}
+
+function testInsightsPieTooltipRemoved(): void {
+  const source = readFileSync("src/routes/_app.results.tsx", "utf8");
+  const pieBlock = source.match(/<PieChart>[\s\S]*?<\/PieChart>/)?.[0] ?? "";
+  assertNotIncludes(pieBlock, "RTooltip", "pie chart no longer renders duplicate tooltip count");
+}
+
+function reportWithDiagnostics(diagnostics: NonNullable<PhaseOneReport["diagnostics"]>): PhaseOneReport {
+  return {
+    ...baseReport(),
+    diagnostics,
+    retrieval_counts: {
+      official_sources_queried: 1,
+      feed_items_fetched: diagnostics.recordsRetrieved,
+      relevant_evidence_attached: diagnostics.relevantEvidence,
+      unique_relevant_evidence_records: diagnostics.relevantEvidence,
+      claim_evidence_links: diagnostics.relevantEvidence,
+    },
+  };
+}
+
+function baseReport(): PhaseOneReport {
+  return {
+    report_id: "report-test",
+    analysis_type: "preliminary_ai_analysis",
+    input_content: "Traffic is busy on Nathan Road.",
+    checked_at: "2026-07-17T09:00:00.000Z",
+    overall_confidence: 0.5,
+    evidence_coverage: "none",
+    claims: [
+      {
+        id: "claim-1",
+        text: "Traffic is busy on Nathan Road.",
+        verdict: "insufficient_evidence",
+        confidence: 0.5,
+        explanation: "No directly relevant current record was matched.",
+        recommendation: "Check official sources.",
+        evidence: [],
+      },
+    ],
+  };
 }
 
 function metadata(value: TrafficEvidenceMetadata): TrafficEvidenceMetadata {

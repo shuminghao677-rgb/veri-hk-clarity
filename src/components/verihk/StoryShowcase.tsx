@@ -13,14 +13,33 @@ const claims = [
 const sources = [
   { name: "HKO", label: "Hong Kong Observatory", status: "live" },
   { name: "TD", label: "Transport Department", status: "live" },
-  { name: "GovHK", label: "Government news", status: "live" },
-  { name: "EDB", label: "Education Bureau", status: "future" },
+  { name: "GovHK", label: "Government news", status: "limited" },
+  { name: "EDB", label: "Education Bureau", status: "planned" },
 ];
 
 const verdicts = [
   { label: "Supported", className: "text-[#12805c]" },
   { label: "Refuted", className: "text-[#d92d20]" },
   { label: "Need evidence", className: "text-[#a16207]" },
+];
+
+const principles = [
+  {
+    title: "Official by default",
+    body: "Weather and transport claims are routed to live official sources before a verdict is shown; GovHK is limited and Education Bureau support is planned.",
+  },
+  {
+    title: "Evidence network",
+    body: "VeriHK separates claims, matches evidence, and keeps the source path visible.",
+  },
+  {
+    title: "Readable explanations",
+    body: "Each report explains the result in plain language, with timestamps and source links.",
+  },
+  {
+    title: "Built to expand",
+    body: "Future ingestion, deduplication and long-term evidence history can be added without changing the report experience.",
+  },
 ];
 
 
@@ -38,19 +57,23 @@ export function StoryShowcase() {
             transition={{ duration: 0.65 }}
             className="max-w-4xl"
           >
-            <h1 className="max-w-4xl text-[2.75rem] font-semibold leading-[1.05] text-foreground sm:text-5xl md:text-6xl lg:text-[4.25rem]">
+            <div className="mb-6 text-xs font-medium uppercase tracking-[0.22em] text-[rgb(8_23_45_/_40%)]">
+              Live official sources · Explainable evidence
+            </div>
+            <h1 className="max-w-4xl text-[2.85rem] font-medium leading-[1.03] tracking-[-0.025em] text-[rgb(8_23_45_/_91%)] sm:text-5xl md:text-6xl lg:text-[4.4rem]">
 
               Verify information
               <span className="text-gradient"> with official Hong Kong data.</span>
             </h1>
-            <p className="mt-7 max-w-2xl text-lg leading-8 text-muted-foreground">
-              VeriHK turns public claims into evidence-backed conclusions using up-to-date official
-              sources.
+            <p className="mt-7 max-w-2xl text-[1.08rem] font-normal leading-8 tracking-[-0.005em] text-[rgb(8_23_45_/_55%)]">
+              VeriHK turns public claims into evidence-backed conclusions using live HKO and
+              Transport Department data, with GovHK limited checks and Education Bureau routing
+              marked as planned.
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-6">
               <Link
                 to="/verify"
-                className="text-base font-bold text-foreground transition-colors hover:text-primary"
+                className="inline-flex items-center border-b border-[rgb(8_23_45_/_22%)] pb-1 text-base font-medium text-foreground transition-colors hover:border-[#0878f9] hover:text-primary"
               >
                 Start Verification
               </Link>
@@ -77,8 +100,9 @@ export function StoryShowcase() {
       <section className="border-y border-[rgb(8_23_45_/_10%)] bg-white/56 py-24 md:py-32">
         <div className="premium-container">
           <StoryCopy eyebrow="Scene 3" title="Official evidence returns as a source network.">
-            Small, specific connectors route each claim to the relevant live source. The result is
-            traceable without looking like a dense knowledge graph.
+            Small, specific connectors route weather and transport claims to live official sources.
+            GovHK appears as a limited source check, while Education Bureau routing remains a planned
+            expansion path.
           </StoryCopy>
           <EvidenceNetwork reducedMotion={Boolean(reducedMotion)} />
         </div>
@@ -100,21 +124,45 @@ export function StoryShowcase() {
                 transition={{ delay: index * 0.08 }}
                 className="border-b border-[rgb(8_23_45_/_10%)] pb-6 last:border-b-0 md:border-b-0 md:border-r md:pb-0 md:pr-6 md:last:border-r-0"
               >
-                <div className={`text-3xl font-semibold ${item.className}`}>{item.label}</div>
+                <div className={`text-3xl font-semibold ${item.className}`}>
+                  {item.label}
+                </div>
+                <p className="mt-3 max-w-[14rem] text-sm leading-6 text-[rgb(8_23_45_/_48%)]">
+                  Linked back to official records and timestamps.
+                </p>
               </motion.div>
             ))}
           </div>
         </div>
 
-        <div className="mt-16">
-          <Link
-            to="/dashboard"
-            className="text-base font-bold text-foreground transition-colors hover:text-primary"
-          >
-            Enter dashboard
-          </Link>
-        </div>
+      </section>
 
+      <section className="border-t border-[rgb(8_23_45_/_10%)] bg-white/45 py-20 md:py-28">
+        <div className="premium-container">
+          <div className="max-w-2xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[rgb(8_23_45_/_42%)]">
+              Product principles
+            </div>
+            <h2 className="mt-3 text-4xl font-medium leading-[1.08] tracking-[-0.02em] text-[rgb(8_23_45_/_88%)] md:text-5xl">
+              Designed to make verification feel inspectable.
+            </h2>
+          </div>
+          <div className="mt-12 border-y border-[rgb(8_23_45_/_12%)]">
+            {principles.map((item) => (
+              <div
+                key={item.title}
+                className="grid gap-4 border-b border-[rgb(8_23_45_/_10%)] py-6 last:border-b-0 md:grid-cols-[240px_1fr]"
+              >
+                <div className="text-sm font-semibold text-[rgb(8_23_45_/_84%)]">
+                  {item.title}
+                </div>
+                <p className="max-w-2xl text-base leading-7 text-[rgb(8_23_45_/_58%)]">
+                  {item.body}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
     </div>
   );
@@ -124,6 +172,9 @@ function HeroBackground() {
   return (
     <div className="absolute inset-0 overflow-hidden" aria-hidden>
       <div className="absolute inset-0 bg-[linear-gradient(180deg,#f7f9fc_0%,#fbfcfe_48%,#fafbfd_100%)]" />
+      <div className="absolute left-[8%] top-[12%] h-72 w-72 rounded-full bg-[#0878f9]/[0.055] blur-3xl" />
+      <div className="absolute right-[10%] top-[4%] h-96 w-96 rounded-full bg-[#0878f9]/[0.045] blur-3xl" />
+      <div className="absolute bottom-[18%] left-[42%] h-64 w-64 rounded-full bg-white/70 blur-3xl" />
       <div
         className="absolute inset-0 bg-cover bg-center opacity-25"
         style={{ backgroundImage: "url('/images/verihk-hong-kong-hero.webp')" }}
@@ -148,7 +199,11 @@ function HeroBackground() {
           d="M0 486 C230 448 324 512 532 474 C720 440 866 378 1038 414 C1190 446 1302 392 1440 404 L1440 720 L0 720 Z"
           fill="url(#harbour)"
         />
-        {/* Decorative skyline and accent line removed for a cleaner hero background */}
+        <g opacity="0.28">
+          <circle cx="390" cy="310" r="72" fill="#0878f9" opacity="0.08" />
+          <circle cx="720" cy="252" r="96" fill="#0878f9" opacity="0.07" />
+          <circle cx="1144" cy="286" r="84" fill="#0878f9" opacity="0.06" />
+        </g>
 
       </svg>
     </div>
@@ -205,7 +260,7 @@ function ClaimTimeline({ reducedMotion }: { reducedMotion: boolean }) {
 
 function EvidenceNetwork({ reducedMotion }: { reducedMotion: boolean }) {
   return (
-    <div className="mt-14 grid gap-8 sm:grid-cols-2 md:grid-cols-4">
+    <div className="relative mt-14 grid gap-8 sm:grid-cols-2 md:grid-cols-4">
       {sources.map((source, index) => (
         <motion.div
           key={source.name}
@@ -213,8 +268,9 @@ function EvidenceNetwork({ reducedMotion }: { reducedMotion: boolean }) {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: index * 0.08 }}
-          className="text-center"
+          className="relative text-center"
         >
+          <span className="mx-auto mb-5 block h-10 w-10 rounded-full bg-[radial-gradient(circle,rgba(8,120,249,0.16)_0%,rgba(8,120,249,0.07)_42%,rgba(8,120,249,0)_72%)]" />
           <div className="text-2xl font-semibold text-[rgb(8_23_45_/_88%)]">{source.name}</div>
           <div className="mt-1 text-sm text-[rgb(8_23_45_/_48%)]">{source.label}</div>
           <div className="mt-2 text-xs uppercase tracking-[0.16em] text-[rgb(8_23_45_/_42%)]">
@@ -241,7 +297,7 @@ function StoryCopy({
       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[rgb(8_23_45_/_42%)]">
         {eyebrow}
       </div>
-      <h2 className="mt-3 text-4xl font-semibold leading-tight text-[rgb(8_23_45_/_88%)] md:text-5xl">
+      <h2 className="mt-3 text-4xl font-medium leading-[1.08] tracking-[-0.02em] text-[rgb(8_23_45_/_88%)] md:text-5xl">
         {title}
       </h2>
       <p className="mt-5 text-base leading-7 text-[rgb(8_23_45_/_58%)]">{children}</p>

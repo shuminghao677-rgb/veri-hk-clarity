@@ -85,11 +85,11 @@ export const officialSources: OfficialSource[] = [
     key: "govnews",
     name: "Government News",
     shortName: "GovNews",
-    type: "Press release feed",
+    type: "Limited source check",
     description:
-      "Official press releases and consolidated advisories from all HKSAR bureaux and departments.",
+      "Recent official news items may support a report only when they directly match the submitted claim.",
     url: "https://www.news.gov.hk",
-    updated: "Continuous",
+    updated: "Limited in prototype",
   },
   {
     key: "td",
@@ -105,11 +105,11 @@ export const officialSources: OfficialSource[] = [
     key: "edb",
     name: "Education Bureau",
     shortName: "EDB",
-    type: "Announcements & RSS",
+    type: "Planned source route",
     description:
-      "Class arrangements, examination notices and school-related official announcements.",
+      "Prepared as a future official-source module for school arrangements and education notices.",
     url: "https://www.edb.gov.hk",
-    updated: "Every 15 minutes",
+    updated: "Planned",
   },
   {
     key: "datagov",
@@ -378,7 +378,7 @@ export const processingSteps: ProcessingStep[] = [
   {
     key: "search",
     label: "Searching official evidence",
-    detail: "Querying HKO, EDB, TD, GovNews and data.gov.hk.",
+    detail: "Querying live HKO and Transport sources, with limited GovHK support.",
   },
   {
     key: "verify",

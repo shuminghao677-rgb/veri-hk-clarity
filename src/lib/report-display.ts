@@ -4,17 +4,24 @@ import type {
   PhaseOneReport,
   ReportVerdict,
   TrafficEvidenceMetadata,
+  VerificationDiagnostics,
 } from "./report-contract";
+import { getModeLabel } from "./verification-mode";
 
 export function getGeneratedReportLabel(report: PhaseOneReport): string {
-  const hasEvidenceBackedVerdict = report.claims.some(
+  const hasFinalEvidenceBackedVerdict = report.claims.some(
     (claim) =>
       (claim.verdict === "supported" || claim.verdict === "refuted") &&
       claim.evidence.some(
         (item) => item.source_authority === "official" || item.source_key === "hko",
       ),
   );
-  if (hasEvidenceBackedVerdict && report.evidence_coverage === "high") {
+  const hasRetrievedOfficialSource =
+    (report.retrieval_counts?.official_sources_queried ?? 0) > 0 ||
+    Boolean(report.source_freshness?.some((item) => item.freshness === "fresh"));
+  const hasAttachedRelevantEvidence = report.claims.some((claim) => claim.evidence.length > 0);
+
+  if (hasRetrievedOfficialSource && hasAttachedRelevantEvidence && hasFinalEvidenceBackedVerdict) {
     return "Live Official Verification Report";
   }
   if ((report.retrieval_counts?.official_sources_queried ?? 0) > 0) {
@@ -29,6 +36,121 @@ export function getHeaderReportLabels(report: PhaseOneReport | null): string[] {
 
 export function getEvidenceItemText(count: number): string {
   return `Retrieved ${count} relevant official evidence ${count === 1 ? "item" : "items"}.`;
+}
+
+export type LiveSourceSummary = {
+  mode: string;
+  officialSource: string;
+  endpoint?: string;
+  recordsRetrieved: number;
+  relevantRecordsMatched: number;
+  matchingResult: string;
+  officialUpdate?: string;
+  freshness?: string;
+  developerFields: Array<{ label: string; value: string }>;
+};
+
+export function buildLiveSourceSummary(report: PhaseOneReport): LiveSourceSummary | null {
+  const diagnostics = report.diagnostics;
+  const counts = report.retrieval_counts;
+
+  if (!diagnostics && !counts) return null;
+
+  const routedSource = diagnostics?.routedSource ?? inferRoutedSource(report);
+  const recordsRetrieved = diagnostics?.recordsRetrieved ?? counts?.feed_items_fetched ?? 0;
+  const relevantRecordsMatched =
+    diagnostics?.relevantEvidence ??
+    counts?.unique_relevant_evidence_records ??
+    counts?.relevant_evidence_attached ??
+    0;
+  const sourceFreshness = routedSource
+    ? report.source_freshness?.find((item) =>
+        routedSource === "TD" ? item.source_key === "td" : item.source_key === "hko",
+      )
+    : report.source_freshness?.[0];
+  const freshness = diagnostics?.freshness ?? sourceFreshness?.freshness;
+  const officialUpdate = diagnostics?.officialUpdatedAt ?? sourceFreshness?.updated_at ?? undefined;
+
+  return {
+    mode: diagnostics ? getModeLabel(diagnostics.mode) : "Auto Detect",
+    officialSource: getOfficialSourceLabel(routedSource),
+    endpoint: diagnostics?.endpointLabel,
+    recordsRetrieved,
+    relevantRecordsMatched,
+    matchingResult: getLiveSourceMatchingText(diagnostics, relevantRecordsMatched),
+    officialUpdate,
+    freshness: freshness ? formatSourceFreshness(freshness) : undefined,
+    developerFields: buildDeveloperDiagnosticsFields(diagnostics),
+  };
+}
+
+export function getLiveSourceMatchingText(
+  diagnostics: VerificationDiagnostics | undefined,
+  relevantRecordsMatched: number,
+): string {
+  if (relevantRecordsMatched > 0) return "Relevant official evidence matched.";
+  if (diagnostics?.matchingStatus === "matched") return "Relevant official evidence matched.";
+  if (diagnostics?.matchingStatus === "no_match" || relevantRecordsMatched === 0) {
+    return "No directly relevant current record was matched.";
+  }
+  return "Matching status was not available.";
+}
+
+export function getRetrievedVsMatchedSentence(
+  recordsRetrieved: number,
+  relevantRecordsMatched: number,
+): string {
+  const recordNoun = recordsRetrieved === 1 ? "record was" : "records were";
+  if (relevantRecordsMatched === 0) {
+    return `${recordsRetrieved} official ${recordNoun} retrieved, but no directly relevant current record was matched to this claim.`;
+  }
+  const matchedNoun = relevantRecordsMatched === 1 ? "record" : "records";
+  return `${recordsRetrieved} official ${recordNoun} retrieved, and ${relevantRecordsMatched} relevant ${matchedNoun} matched this claim.`;
+}
+
+function buildDeveloperDiagnosticsFields(
+  diagnostics: VerificationDiagnostics | undefined,
+): Array<{ label: string; value: string }> {
+  if (!diagnostics) return [];
+
+  return [
+    { label: "selected mode", value: getModeLabel(diagnostics.mode) },
+    { label: "routed source", value: diagnostics.routedSource },
+    { label: "endpoint label", value: diagnostics.endpointLabel },
+    { label: "records retrieved", value: String(diagnostics.recordsRetrieved) },
+    { label: "relevant evidence", value: String(diagnostics.relevantEvidence) },
+    { label: "parsing status", value: diagnostics.parsingStatus },
+    { label: "matching status", value: diagnostics.matchingStatus },
+    { label: "deterministic result", value: diagnostics.deterministicResult },
+    { label: "adjudicator called", value: diagnostics.adjudicatorCalled ? "yes" : "no" },
+    { label: "freshness", value: diagnostics.freshness ? formatSourceFreshness(diagnostics.freshness) : "Not stated" },
+    { label: "official update time", value: diagnostics.officialUpdatedAt ?? "Not stated" },
+  ];
+}
+
+function inferRoutedSource(report: PhaseOneReport): VerificationDiagnostics["routedSource"] | null {
+  if (report.claims.some((claim) => claim.evidence.some((item) => item.source_key === "td"))) {
+    return "TD";
+  }
+  if (report.claims.some((claim) => claim.evidence.some((item) => item.source_key === "hko"))) {
+    return "HKO";
+  }
+  if (report.source_freshness?.some((item) => item.source_key === "td")) return "TD";
+  if (report.source_freshness?.some((item) => item.source_key === "hko")) return "HKO";
+  return null;
+}
+
+function getOfficialSourceLabel(source: VerificationDiagnostics["routedSource"] | null): string {
+  if (source === "TD") return "Transport Department";
+  if (source === "HKO") return "Hong Kong Observatory";
+  return "Recorded official source";
+}
+
+function formatSourceFreshness(value: string): string {
+  if (value === "fresh") return "Fresh";
+  if (value === "stale") return "Stale";
+  if (value === "unavailable") return "Unavailable";
+  return value;
 }
 
 export type ClaimDisplayExplanation = {
@@ -202,6 +324,9 @@ export function buildTransportVerdictExplanation({
   }
 
   if (eventType === "traffic_congestion") {
+    if (/caused by|cause is|due to|because of/i.test(claim.text)) {
+      return claim.explanation;
+    }
     return `The latest Transport Department update reports busy or congested traffic ${location}.`;
   }
 

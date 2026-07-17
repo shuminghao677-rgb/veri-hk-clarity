@@ -6,7 +6,6 @@ import {
   XCircle,
   HelpCircle,
   ListChecks,
-  Gauge,
   ExternalLink,
   Sparkles,
   FileText,
@@ -61,9 +60,12 @@ import {
 import { formatHongKongTime } from "@/lib/live-sources";
 import {
   buildClaimDisplayExplanation,
+  buildLiveSourceSummary,
+  getRetrievedVsMatchedSentence,
   getHeaderReportLabels,
   getOfficialUpdateLabel,
   getRetrievedByVeriHkLabel,
+  type LiveSourceSummary,
 } from "@/lib/report-display";
 import { hasMatchedTransportEvidence } from "@/lib/traffic-map-utils";
 
@@ -162,6 +164,7 @@ function Results() {
     : mockDistributionData;
   const sourceUsageData = isGenerated ? buildGeneratedSourceUsage(evidence) : mockSourceUsageData;
   const retrievalCounts = generatedReport?.retrieval_counts;
+  const liveSourceSummary = generatedReport ? buildLiveSourceSummary(generatedReport) : null;
   const showTrafficMap = generatedReport
     ? hasMatchedTransportEvidence(generatedReport.claims)
     : false;
@@ -253,11 +256,11 @@ function Results() {
                     retrievalCounts.relevant_evidence_attached}
                 </div>
                 <div className="mt-1 text-muted-foreground">
-                  Unique relevant evidence{" "}
+                  Relevant records matched{" "}
                   {(retrievalCounts.unique_relevant_evidence_records ??
                     retrievalCounts.relevant_evidence_attached) === 1
-                    ? "item"
-                    : "items"}
+                    ? "record"
+                    : "records"}
                 </div>
                 {retrievalCounts.claim_evidence_links &&
                   retrievalCounts.claim_evidence_links >
@@ -291,6 +294,8 @@ function Results() {
             </div>
           )}
         </Card>
+
+        {liveSourceSummary && <LiveSourceSummaryCard summary={liveSourceSummary} />}
 
         {/* Two-column: claims & charts */}
         <div className="mt-8 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
@@ -391,7 +396,6 @@ function Results() {
                         <Cell key={idx} fill={d.color} />
                       ))}
                     </Pie>
-                    <RTooltip contentStyle={tooltipStyle} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -516,6 +520,79 @@ function Results() {
   );
 }
 
+function LiveSourceSummaryCard({ summary }: { summary: LiveSourceSummary }) {
+  return (
+    <section className="mt-8" aria-labelledby="live-source-summary-title">
+      <Card className="panel rounded-[2rem] p-6 md:p-8">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h2 id="live-source-summary-title" className="text-xl font-semibold tracking-tight">
+              Live Source Summary
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {getRetrievedVsMatchedSentence(
+                summary.recordsRetrieved,
+                summary.relevantRecordsMatched,
+              )}
+            </p>
+          </div>
+          <Badge variant="outline" className="w-fit rounded-full">
+            {summary.matchingResult}
+          </Badge>
+        </div>
+
+        <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryField label="Verification mode" value={summary.mode} />
+          <SummaryField label="Official source" value={summary.officialSource} />
+          {summary.endpoint && <SummaryField label="Endpoint" value={summary.endpoint} />}
+          <SummaryField
+            label="Official records retrieved"
+            value={String(summary.recordsRetrieved)}
+          />
+          <SummaryField
+            label="Relevant records matched"
+            value={String(summary.relevantRecordsMatched)}
+          />
+          <SummaryField label="Matching result" value={summary.matchingResult} />
+          {summary.officialUpdate && (
+            <SummaryField
+              label="Official update"
+              value={formatHongKongTime(summary.officialUpdate)}
+            />
+          )}
+          {summary.freshness && <SummaryField label="Freshness" value={summary.freshness} />}
+        </dl>
+
+        {shouldShowDeveloperDetails() && summary.developerFields.length > 0 && (
+          <details className="mt-5 rounded-2xl border bg-background/60 p-4">
+            <summary className="cursor-pointer text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              Developer Details
+            </summary>
+            <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+              {summary.developerFields.map((field) => (
+                <SummaryField key={field.label} label={field.label} value={field.value} />
+              ))}
+            </dl>
+          </details>
+        )}
+      </Card>
+    </section>
+  );
+}
+
+function SummaryField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl border bg-background/65 p-3">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-medium text-foreground">{value}</dd>
+    </div>
+  );
+}
+
+function shouldShowDeveloperDetails(): boolean {
+  return import.meta.env.DEV || import.meta.env.VITE_SHOW_DEVELOPER_DETAILS === "true";
+}
+
 function toMockClaim(claim: PhaseOneClaim): Claim {
   const explanation = buildClaimDisplayExplanation(claim);
   return {
@@ -571,7 +648,7 @@ function toMockEvidence(claims: PhaseOneClaim[]): Evidence[] {
     publishedAt: item.published_at ? formatHongKongTime(item.published_at) : "Not stated by source",
     updatedAt: getOfficialUpdateLabel(item, formatHongKongTime),
     retrievedAt: getRetrievedByVeriHkLabel(item, formatHongKongTime),
-    summary: `${item.summary} Freshness: ${item.freshness}. Retrieved: ${formatHongKongTime(
+    summary: `${item.summary}${item.traffic_metadata?.cause ? ` Cause: ${item.traffic_metadata.cause}.` : ""} Freshness: ${item.freshness}. Retrieved: ${formatHongKongTime(
       item.retrieved_at,
     )}.`,
     citation: item.title,

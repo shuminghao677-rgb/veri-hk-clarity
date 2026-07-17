@@ -5,12 +5,20 @@ import type {
   PhaseOneEvidence,
   ReportVerdict,
   SourceFreshness,
+  TrafficGenerationMetadata,
 } from "./report-contract";
 import {
   evaluateTrafficClaimWithSources,
   retrieveTrafficEvidence,
   type TrafficSourceSnapshot,
 } from "./traffic-sources";
+import {
+  adjudicateClaimWithOfficialEvidence,
+  applyAdjudicationToClaim,
+  buildAdjudicationInput,
+  insufficientAdjudicationClaim,
+  type EvidenceAdjudicatorOptions,
+} from "./evidence-adjudicator";
 
 const HKO_WEATHER_BASE = "https://data.weather.gov.hk/weatherAPI/opendata/weather.php";
 const HKO_WARNINGS_PAGE = "https://www.hko.gov.hk/en/wxinfo/currwx/warning.htm";
@@ -21,6 +29,12 @@ const RSS_CACHE_MS = Number(process.env.RSS_CACHE_MS || 3 * 60 * 1000);
 const RECENT_ITEM_DAYS = Number(process.env.OFFICIAL_SOURCE_RECENT_DAYS || 14);
 const MIN_RELEVANCE_SCORE = 4;
 const HK_TIME_ZONE = "Asia/Hong_Kong";
+const EXACT_TEMPERATURE_TOLERANCE_C = 0.5;
+const APPROXIMATE_TEMPERATURE_TOLERANCE_C = 1.0;
+const EXACT_HUMIDITY_TOLERANCE_PERCENT = 0.5;
+const APPROXIMATE_HUMIDITY_TOLERANCE_PERCENT = 2;
+const DEFAULT_TEMPERATURE_STATION = "Hong Kong Observatory";
+const DEFAULT_HUMIDITY_STATION = "Hong Kong Observatory";
 
 const DEFAULT_RSS_FEEDS: RssFeedConfig[] = [
   {
@@ -149,13 +163,20 @@ export type EvidenceRetrievalResult = {
   claims: PhaseOneClaim[];
   freshness: SourceFreshnessSummary[];
   coverage: EvidenceCoverage;
-    counts: {
-      official_sources_queried: number;
-      feed_items_fetched: number;
-      relevant_evidence_attached: number;
-      unique_relevant_evidence_records?: number;
-      claim_evidence_links?: number;
-    };
+  counts: {
+    official_sources_queried: number;
+    feed_items_fetched: number;
+    relevant_evidence_attached: number;
+    unique_relevant_evidence_records?: number;
+    claim_evidence_links?: number;
+  };
+  diagnostics?: {
+    adjudicatorCalled: boolean;
+  };
+};
+
+export type EvidenceRetrievalContext = {
+  trafficGenerationMetadata?: TrafficGenerationMetadata;
 };
 
 export type SourceFreshnessSummary = {
@@ -191,11 +212,50 @@ type ClaimedWarning = {
   codes: string[];
 };
 
+type CurrentTemperatureClaim = {
+  valueC: number;
+  originalValue: number;
+  unit: "C" | "F";
+  operator: NumericComparisonOperator;
+  approximate: boolean;
+  toleranceC: number;
+  station: string | null;
+};
+
+type HkoTemperatureObservation = {
+  station: string;
+  valueC: number;
+  recordTime: string | null;
+  retrievedAt: string;
+  updatedAt: string | null;
+};
+
+type NumericComparisonOperator = "gt" | "gte" | "lt" | "lte" | "eq" | "approx";
+
+type CurrentHumidityClaim = {
+  valuePercent: number;
+  operator: NumericComparisonOperator;
+  approximate: boolean;
+  tolerancePercent: number;
+  station: string | null;
+};
+
+type HkoHumidityObservation = {
+  station: string | null;
+  scope: string;
+  valuePercent: number;
+  recordTime: string | null;
+  retrievedAt: string;
+  updatedAt: string | null;
+};
+
 let hkoCache = new Map<HkoWeatherDataType, CacheEntry<SourceSnapshot>>();
 let rssCache: CacheEntry<SourceSnapshot> | null = null;
 
 export async function retrieveLiveEvidence(
   claims: PhaseOneClaim[],
+  adjudicatorOptions: EvidenceAdjudicatorOptions = {},
+  context: EvidenceRetrievalContext = {},
 ): Promise<EvidenceRetrievalResult> {
   const routes = getRequiredRoutes(claims);
   const [initialHko, rss, td] = await Promise.all([
@@ -207,14 +267,16 @@ export async function retrieveLiveEvidence(
   const hkoDetails = await fetchHkoBundle(detailRoutes);
   const hko = { ...(initialHko ?? {}), ...(hkoDetails ?? {}) };
 
-  return evaluateClaimsWithSources(claims, { hko, rss, td });
+  const deterministic = evaluateClaimsWithSources(claims, { hko, rss, td }, context);
+  return adjudicateEvidenceRetrievalResult(deterministic, adjudicatorOptions);
 }
 
 export function evaluateClaimsWithSources(
   claims: PhaseOneClaim[],
   sources: SourceBundle,
+  context: EvidenceRetrievalContext = {},
 ): EvidenceRetrievalResult {
-  const evaluatedClaims = claims.map((claim) => evaluateClaimWithSources(claim, sources));
+  const evaluatedClaims = claims.map((claim) => evaluateClaimWithSources(claim, sources, context));
   const attachedCount = evaluatedClaims.reduce((sum, claim) => sum + claim.evidence.length, 0);
   const uniqueAttachedCount = countUniqueEvidenceRecords(evaluatedClaims.flatMap((claim) => claim.evidence));
   const snapshots = flattenSnapshots(sources);
@@ -234,6 +296,85 @@ export function evaluateClaimsWithSources(
       claim_evidence_links: attachedCount,
     },
   };
+}
+
+export async function adjudicateEvidenceRetrievalResult(
+  result: EvidenceRetrievalResult,
+  options: EvidenceAdjudicatorOptions = {},
+): Promise<EvidenceRetrievalResult> {
+  let adjudicatorCalled = false;
+  const adjudicatedClaims = await Promise.all(
+    result.claims.map(async (claim) => {
+      if (claim.verdict === "supported" || claim.verdict === "refuted") {
+        logAdjudicatorSkip(claim, "conclusive_deterministic_result");
+        return claim;
+      }
+      const category = classifyClaim(claim.text);
+      if (!shouldUseEvidenceAdjudicator(category)) {
+        logAdjudicatorSkip(claim, `deterministic_category_${category}`);
+        return claim;
+      }
+      if (claim.evidence.length === 0) {
+        logAdjudicatorSkip(claim, "no_relevant_evidence");
+        return claim;
+      }
+      if (!hasFreshOfficialEvidenceForAdjudication(claim)) {
+        logAdjudicatorSkip(claim, "no_fresh_known_dataset_evidence");
+        return claim;
+      }
+
+      const input = buildAdjudicationInput(claim, category, claim.evidence);
+      adjudicatorCalled = true;
+      const adjudication = await adjudicateClaimWithOfficialEvidence(input, options);
+      if (!adjudication.ok) {
+        logAdjudicatorValidation(claim, adjudication.reason);
+        return insufficientAdjudicationClaim(claim);
+      }
+      logAdjudicatorValidation(claim, undefined, adjudication.output.verdict);
+      return applyAdjudicationToClaim(claim, claim.evidence, adjudication.output);
+    }),
+  );
+
+  return {
+    ...result,
+    claims: adjudicatedClaims,
+    coverage: calculateCoverage(adjudicatedClaims, []),
+    counts: {
+      ...result.counts,
+      relevant_evidence_attached: countUniqueEvidenceRecords(
+        adjudicatedClaims.flatMap((claim) => claim.evidence),
+      ),
+      unique_relevant_evidence_records: countUniqueEvidenceRecords(
+        adjudicatedClaims.flatMap((claim) => claim.evidence),
+      ),
+      claim_evidence_links: adjudicatedClaims.reduce((sum, claim) => sum + claim.evidence.length, 0),
+    },
+    diagnostics: {
+      ...(result.diagnostics ?? {}),
+      adjudicatorCalled,
+    },
+  };
+}
+
+function shouldUseEvidenceAdjudicator(category: ClaimCategory): boolean {
+  return (
+    category === "general_government" ||
+    category === "education_suspension" ||
+    category === "active_weather_warning" ||
+    category === "weather_general" ||
+    category === "current_weather_observation" ||
+    category === "future_weather_forecast" ||
+    category === "recent_rainfall"
+  );
+}
+
+function hasFreshOfficialEvidenceForAdjudication(claim: PhaseOneClaim): boolean {
+  return claim.evidence.some(
+    (item) =>
+      item.freshness === "fresh" &&
+      (item.source_authority === "official" || Boolean(item.source_key)) &&
+      (item.structured_facts || item.summary || item.excerpt),
+  );
 }
 
 function countUniqueEvidenceRecords(evidence: PhaseOneEvidence[]): number {
@@ -272,6 +413,8 @@ function getRequiredRoutes(claims: PhaseOneClaim[]): {
       hko.add("rhrread");
     } else if (category === "education_suspension") {
       rss = true;
+    } else if (category === "general_government") {
+      rss = true;
     } else if (isTransportDepartmentClaimCategory(category)) {
       td = true;
     }
@@ -293,7 +436,7 @@ function getRequiredHkoDetailRoutes(
     const claimedWarning = getClaimedWeatherWarning(claim.text);
     if (!claimedWarning) continue;
     const activeMatch = warnsum.evidence.find((item) =>
-      claimedWarning.codes.includes(getEvidenceCode(item)),
+      !isWarnsumSummaryEvidence(item) && claimedWarning.codes.includes(getEvidenceCode(item)),
     );
     if (activeMatch) routes.add("warningInfo");
   }
@@ -301,7 +444,11 @@ function getRequiredHkoDetailRoutes(
   return routes;
 }
 
-function evaluateClaimWithSources(claim: PhaseOneClaim, sources: SourceBundle): EvaluatedClaim {
+function evaluateClaimWithSources(
+  claim: PhaseOneClaim,
+  sources: SourceBundle,
+  context: EvidenceRetrievalContext,
+): EvaluatedClaim {
   const category = classifyClaim(claim.text);
 
   if (category === "active_weather_warning") {
@@ -344,8 +491,14 @@ function evaluateClaimWithSources(claim: PhaseOneClaim, sources: SourceBundle): 
       sources.rss ?? emptySnapshot("govnews", "Government News"),
     );
   }
+  if (category === "general_government") {
+    return evaluateGeneralGovernmentClaim(
+      claim,
+      sources.rss ?? emptySnapshot("govnews", "Government News"),
+    );
+  }
   if (isTransportDepartmentClaimCategory(category)) {
-    return evaluateTrafficClaimWithSources(claim, sources.td);
+    return evaluateTrafficClaimWithSources(claim, sources.td, context.trafficGenerationMetadata);
   }
 
   return withVerdict(
@@ -395,7 +548,7 @@ export function classifyClaim(text: string): ClaimCategory {
     /(warning|signal|rainstorm|typhoon|cyclone|thunderstorm|monsoon|landslip|tsunami|fire danger|very hot|cold weather|black rain|red rain|amber rain)/.test(
       normalized,
     ) &&
-    /(active|issued|in force|hoisted|currently|now|has issued|is issued|signal no)/.test(normalized)
+    /(active|issued|in force|hoisted|currently|now|has issued|is issued|signal no|no weather warning|no warnings|none|zero|cancelled|canceled)/.test(normalized)
   ) {
     return "active_weather_warning";
   }
@@ -486,19 +639,24 @@ function evaluateActiveWeatherWarningClaim(claim: PhaseOneClaim, hko: HkoBundle)
 
   const claimedWarning = getClaimedWeatherWarning(claim.text);
   if (!claimedWarning) {
+    const summaryEvidence = getWarnsumSummaryEvidence(warnsum);
     return withVerdict(
       claim,
       "insufficient_evidence",
-      [],
+      summaryEvidence ? [{ ...summaryEvidence, relevance_score: 8 }] : [],
       0.55,
-      "The claim appears to concern an active weather warning, but VeriHK could not identify a specific warning code to compare with HKO.",
-      "Use a specific warning name or signal number, then retry the verification.",
+      summaryEvidence
+        ? "The HKO current weather warning summary was retrieved and normalized, but this phrasing needs semantic comparison against the aggregate warning state."
+        : "The claim appears to concern an active weather warning, but VeriHK could not identify a specific warning code to compare with HKO.",
+      summaryEvidence
+        ? "Review the attached HKO warning summary and the generated comparison."
+        : "Use a specific warning name or signal number, then retry the verification.",
       "low",
     );
   }
 
   const activeMatch = warnsum.evidence.find((item) =>
-    claimedWarning.codes.includes(getEvidenceCode(item)),
+    !isWarnsumSummaryEvidence(item) && claimedWarning.codes.includes(getEvidenceCode(item)),
   );
   if (activeMatch) {
     const evidence = [
@@ -517,7 +675,7 @@ function evaluateActiveWeatherWarningClaim(claim: PhaseOneClaim, hko: HkoBundle)
   }
 
   const groupEvidence = warnsum.evidence.find(
-    (item) => getEvidenceWarningGroup(item) === claimedWarning.group,
+    (item) => !isWarnsumSummaryEvidence(item) && getEvidenceWarningGroup(item) === claimedWarning.group,
   );
   const negativeEvidence = createNegativeWarningEvidence(
     claimedWarning,
@@ -604,6 +762,122 @@ function evaluateCurrentWeatherClaim(
       "none",
     );
   }
+  const temperatureClaim = extractCurrentTemperatureClaim(claim.text);
+  if (temperatureClaim) {
+    const observation = findHkoTemperatureObservation(rhrread, temperatureClaim);
+    if (!observation) {
+      return withVerdict(
+        claim,
+        "insufficient_evidence",
+        [],
+        0.5,
+        temperatureClaim.station
+          ? "The HKO current local weather report was checked, but VeriHK could not find a valid current temperature for the claimed station."
+          : "The HKO current local weather report was checked, but VeriHK could not find a valid current temperature for the Hong Kong Observatory reference station.",
+        "Check the latest HKO local weather report because current observations may change.",
+        "none",
+      );
+    }
+
+    const comparison = compareNumericObservation(
+      observation.valueC,
+      temperatureClaim.valueC,
+      temperatureClaim.operator,
+      temperatureClaim.toleranceC,
+    );
+    const differenceC = roundOne(Math.abs(observation.valueC - temperatureClaim.valueC));
+    const evidence = createCurrentTemperatureEvidence(
+      claim.id,
+      temperatureClaim,
+      observation,
+      differenceC,
+      comparison,
+    );
+    const claimValueText = formatTemperatureC(temperatureClaim.valueC);
+    const officialValueText = formatTemperatureC(observation.valueC);
+    const observedTimeText = observation.recordTime
+      ? ` at ${formatHongKongTimeShort(observation.recordTime)}`
+      : "";
+    const explanation = buildNumericComparisonExplanation({
+      metricLabel: "temperature",
+      locationLabel: `${observation.station} station`,
+      officialValueText,
+      observedTimeText,
+      operator: temperatureClaim.operator,
+      claimedValueText: claimValueText,
+      toleranceText: `±${temperatureClaim.toleranceC}°C`,
+      supported: comparison,
+    });
+
+    return withVerdict(
+      claim,
+      comparison ? "supported" : "refuted",
+      [evidence],
+      comparison ? 0.88 : 0.86,
+      explanation,
+      "Check the latest HKO local weather report because current observations may change.",
+      "high",
+    );
+  }
+
+  const humidityClaim = extractCurrentHumidityClaim(claim.text);
+  if (humidityClaim) {
+    const observation = findHkoHumidityObservation(rhrread, humidityClaim);
+    if (!observation) {
+      return withVerdict(
+        claim,
+        "insufficient_evidence",
+        [],
+        0.5,
+        humidityClaim.station
+          ? "The HKO current local weather report was checked, but VeriHK could not find a valid current relative-humidity observation for the claimed station."
+          : "The HKO current local weather report was checked, but VeriHK could not find a valid current relative-humidity observation for the Hong Kong Observatory reference station or territory-level humidity record.",
+        "Check the latest HKO local weather report because current observations may change.",
+        "none",
+      );
+    }
+
+    const comparison = compareNumericObservation(
+      observation.valuePercent,
+      humidityClaim.valuePercent,
+      humidityClaim.operator,
+      humidityClaim.tolerancePercent,
+    );
+    const differencePercent = roundOne(Math.abs(observation.valuePercent - humidityClaim.valuePercent));
+    const evidence = createCurrentHumidityEvidence(
+      claim.id,
+      humidityClaim,
+      observation,
+      differencePercent,
+      comparison,
+    );
+    const officialValueText = `${observation.valuePercent}%`;
+    const claimedValueText = `${humidityClaim.valuePercent}%`;
+    const observedTimeText = observation.recordTime
+      ? ` at ${formatHongKongTimeShort(observation.recordTime)}`
+      : "";
+    const explanation = buildNumericComparisonExplanation({
+      metricLabel: "relative humidity",
+      locationLabel: observation.station ? `${observation.station} station` : observation.scope,
+      officialValueText,
+      observedTimeText,
+      operator: humidityClaim.operator,
+      claimedValueText,
+      toleranceText: `±${humidityClaim.tolerancePercent} percentage points`,
+      supported: comparison,
+    });
+
+    return withVerdict(
+      claim,
+      comparison ? "supported" : "refuted",
+      [evidence],
+      comparison ? 0.88 : 0.86,
+      explanation,
+      "Check the latest HKO local weather report because current observations may change.",
+      "high",
+    );
+  }
+
   const evidence = rhrread.evidence
     .map((item) => ({ item, score: scoreGeneralWeatherEvidence(item, claim.text) }))
     .filter(({ score }) => score >= MIN_RELEVANCE_SCORE)
@@ -622,6 +896,340 @@ function evaluateCurrentWeatherClaim(
     "Review the latest HKO local weather report before acting on this claim.",
     evidence.length ? "medium" : "low",
   );
+}
+
+function extractCurrentTemperatureClaim(text: string): CurrentTemperatureClaim | null {
+  const normalized = normalizeText(text);
+  if (!/(temperature|degrees|celsius|fahrenheit|°|currently|current|now)/i.test(text)) {
+    return null;
+  }
+  if (!/(temperature|degrees|celsius|fahrenheit|°c|°f|\bc\b|\bf\b)/i.test(text)) return null;
+
+  const match = text.match(
+    /(-?\d+(?:\.\d+)?)\s*(?:°\s*)?(?:degrees?\s*)?(c|f|celsius|fahrenheit)\b/i,
+  );
+  if (!match) return null;
+
+  const originalValue = Number(match[1]);
+  if (!Number.isFinite(originalValue)) return null;
+  const unit = /^f/i.test(match[2]) ? "F" : "C";
+  const valueC = unit === "F" ? fahrenheitToCelsius(originalValue) : originalValue;
+  const operator = extractNumericComparisonOperator(normalized);
+  const approximate = operator === "approx";
+  const station = extractTemperatureStation(text);
+
+  return {
+    valueC: roundOne(valueC),
+    originalValue,
+    unit,
+    operator,
+    approximate,
+    toleranceC: approximate ? APPROXIMATE_TEMPERATURE_TOLERANCE_C : EXACT_TEMPERATURE_TOLERANCE_C,
+    station,
+  };
+}
+
+function extractCurrentHumidityClaim(text: string): CurrentHumidityClaim | null {
+  const normalized = normalizeText(text);
+  if (!/(humidity|relative humidity)/i.test(text)) return null;
+  if (!/(current|currently|now|humidity|relative humidity)/i.test(text)) return null;
+
+  const match = text.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (!match) return null;
+  const valuePercent = Number(match[1]);
+  if (!Number.isFinite(valuePercent) || valuePercent < 0 || valuePercent > 100) return null;
+  const operator = extractNumericComparisonOperator(normalized);
+  const station = extractHumidityStation(text);
+
+  return {
+    valuePercent,
+    operator,
+    approximate: operator === "approx",
+    tolerancePercent:
+      operator === "approx" ? APPROXIMATE_HUMIDITY_TOLERANCE_PERCENT : EXACT_HUMIDITY_TOLERANCE_PERCENT,
+    station,
+  };
+}
+
+function extractNumericComparisonOperator(normalized: string): NumericComparisonOperator {
+  if (/\b(no less than|at least)\b/.test(normalized)) return "gte";
+  if (/\b(no more than|at most)\b/.test(normalized)) return "lte";
+  if (/\b(above|over|greater than|more than)\b/.test(normalized)) return "gt";
+  if (/\b(below|under|less than)\b/.test(normalized)) return "lt";
+  if (/\b(around|about|approximately|approx|roughly|near|nearly)\b/.test(normalized)) return "approx";
+  if (/\b(exactly|equal to|equals)\b/.test(normalized)) return "eq";
+  return "eq";
+}
+
+function extractTemperatureStation(text: string): string | null {
+  const normalized = normalizeText(text);
+  if (/(hong kong observatory|hko station|observatory station)/.test(normalized)) {
+    return DEFAULT_TEMPERATURE_STATION;
+  }
+  if (/\bhong kong\b|territory/.test(normalized)) return null;
+
+  const stationMatch = text.match(
+    /\b(?:in|at|near)\s+([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,4})(?:\s+(?:is|was|now|currently|recorded|station)\b|[,.]|$)/,
+  );
+  if (!stationMatch) return null;
+  const station = stationMatch[1].trim();
+  return /hong kong/i.test(station) ? null : station;
+}
+
+function extractHumidityStation(text: string): string | null {
+  const normalized = normalizeText(text);
+  if (/(hong kong observatory|hko station|observatory station)/.test(normalized)) {
+    return DEFAULT_HUMIDITY_STATION;
+  }
+  if (/\bhong kong\b|territory/.test(normalized)) return null;
+
+  const stationMatch = text.match(
+    /\b(?:in|at|near)\s+([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,4})(?:\s+(?:is|was|now|currently|recorded|station)\b|[,.]|$)/,
+  );
+  if (!stationMatch) return null;
+  const station = stationMatch[1].trim();
+  return /hong kong/i.test(station) ? null : station;
+}
+
+function findHkoTemperatureObservation(
+  rhrread: SourceSnapshot,
+  claim: CurrentTemperatureClaim,
+): HkoTemperatureObservation | null {
+  if (!isRecord(rhrread.raw) || !isRecord(rhrread.raw.temperature)) return null;
+  const temperature = rhrread.raw.temperature;
+  const rows = Array.isArray(temperature.data) ? temperature.data : [];
+  const targetStation = claim.station ?? DEFAULT_TEMPERATURE_STATION;
+  const row = rows.find((item) => {
+    if (!isRecord(item)) return false;
+    const place = getString(item.place) ?? getString(item.station) ?? getString(item.name);
+    return place ? normalizeText(place) === normalizeText(targetStation) : false;
+  });
+  if (!isRecord(row)) return null;
+
+  const value = getNestedNumber(row);
+  const unit = getString(row.unit) ?? getString(temperature.unit) ?? "C";
+  if (value === null || !Number.isFinite(value)) return null;
+  const valueC = /^f/i.test(unit) ? fahrenheitToCelsius(value) : value;
+  if (!Number.isFinite(valueC)) return null;
+
+  const recordTime =
+    parseOfficialDate(getString(temperature.recordTime)) ??
+    parseOfficialDate(getString(rhrread.raw.updateTime)) ??
+    rhrread.freshness[0]?.updated_at ??
+    null;
+
+  return {
+    station: getString(row.place) ?? targetStation,
+    valueC: roundOne(valueC),
+    recordTime,
+    retrievedAt: rhrread.freshness[0]?.retrieved_at ?? new Date().toISOString(),
+    updatedAt: recordTime ?? rhrread.freshness[0]?.updated_at ?? null,
+  };
+}
+
+function findHkoHumidityObservation(
+  rhrread: SourceSnapshot,
+  claim: CurrentHumidityClaim,
+): HkoHumidityObservation | null {
+  if (!isRecord(rhrread.raw) || !isRecord(rhrread.raw.humidity)) return null;
+  const humidity = rhrread.raw.humidity;
+  const rows = Array.isArray(humidity.data) ? humidity.data : [];
+  const targetStation = claim.station ?? DEFAULT_HUMIDITY_STATION;
+  const row = rows.find((item) => {
+    if (!isRecord(item)) return false;
+    const place = getString(item.place) ?? getString(item.station) ?? getString(item.name);
+    if (!place && claim.station === null) return true;
+    return place ? normalizeText(place) === normalizeText(targetStation) : false;
+  });
+  const selected = isRecord(row) ? row : rows.length === 0 ? humidity : null;
+  if (!isRecord(selected)) return null;
+
+  const value = getNestedNumber(selected);
+  const unit = getString(selected.unit) ?? getString(humidity.unit) ?? "percent";
+  if (value === null || !Number.isFinite(value)) return null;
+  if (!/^(%|percent|percentage)$/i.test(unit)) return null;
+
+  const place = getString(selected.place) ?? getString(selected.station) ?? getString(selected.name);
+  const recordTime =
+    parseOfficialDate(getString(humidity.recordTime)) ??
+    parseOfficialDate(getString(rhrread.raw.updateTime)) ??
+    rhrread.freshness[0]?.updated_at ??
+    null;
+
+  return {
+    station: place,
+    scope: place ? `the ${place} station` : "the HKO territory-level relative humidity observation",
+    valuePercent: roundOne(value),
+    recordTime,
+    retrievedAt: rhrread.freshness[0]?.retrieved_at ?? new Date().toISOString(),
+    updatedAt: recordTime ?? rhrread.freshness[0]?.updated_at ?? null,
+  };
+}
+
+function compareNumericObservation(
+  observed: number,
+  claimed: number,
+  operator: NumericComparisonOperator,
+  tolerance: number,
+): boolean {
+  if (operator === "gt") return observed > claimed;
+  if (operator === "gte") return observed >= claimed;
+  if (operator === "lt") return observed < claimed;
+  if (operator === "lte") return observed <= claimed;
+  return Math.abs(observed - claimed) <= tolerance;
+}
+
+function createCurrentTemperatureEvidence(
+  claimId: string,
+  claim: CurrentTemperatureClaim,
+  observation: HkoTemperatureObservation,
+  differenceC: number,
+  comparisonResult: boolean,
+): PhaseOneEvidence {
+  const timeText = observation.recordTime ? formatHongKongTimeShort(observation.recordTime) : "the official record time";
+  const officialValue = formatTemperatureC(observation.valueC);
+  const claimedValue = formatTemperatureC(claim.valueC);
+  const requirement = numericRequirementPhrase("temperature", claim.operator, claimedValue);
+  const excerpt =
+    claim.operator === "eq" || claim.operator === "approx"
+      ? `${observation.station} recorded ${officialValue} at ${timeText}. Claimed temperature: ${claim.operator === "approx" ? "around " : ""}${claimedValue}. Difference: ${differenceC}°C. Tolerance: ±${claim.toleranceC}°C.`
+      : `${observation.station} recorded ${officialValue} at ${timeText}. The claim requires the temperature to be ${operatorPhrase(claim.operator)} ${claimedValue}.`;
+
+  return officialHkoEvidence({
+    id: `hko-rhrread-temperature-${hashStable(`${claimId}-${observation.station}-${observation.recordTime ?? ""}`)}`,
+    dataType: "rhrread",
+    title: `Current Temperature at ${formatStationForTitle(observation.station)}`,
+    summary:
+      claim.operator === "eq" || claim.operator === "approx"
+        ? `HKO rhrread temperature observation. Station: ${observation.station}. Observed temperature: ${officialValue}. Claimed temperature: ${claim.operator === "approx" ? "around " : ""}${claimedValue}. Difference: ${differenceC}°C. Tolerance: ±${claim.toleranceC}°C. Reference station policy: unspecified Hong Kong current-temperature claims use the Hong Kong Observatory station, not an average of all stations.`
+        : `HKO rhrread temperature observation. Station: ${observation.station}. Observed temperature: ${officialValue}. ${requirement}. Reference station policy: unspecified Hong Kong current-temperature claims use the Hong Kong Observatory station, not an average of all stations.`,
+    retrievedAt: observation.retrievedAt,
+    updatedAt: observation.updatedAt,
+    publishedAt: observation.recordTime,
+    category: "current_weather_observation",
+    extra: {
+      excerpt,
+      relevance_score: 10,
+      structured_facts: {
+        metric: "temperature",
+        observedValue: observation.valueC,
+        operator: claim.operator,
+        claimedValue: claim.valueC,
+        unit: "celsius",
+        comparisonResult,
+        station: observation.station,
+        observationTime: observation.recordTime,
+        freshness: "fresh",
+        retrievedAt: observation.retrievedAt,
+      },
+    },
+  });
+}
+
+function createCurrentHumidityEvidence(
+  claimId: string,
+  claim: CurrentHumidityClaim,
+  observation: HkoHumidityObservation,
+  differencePercent: number,
+  comparisonResult: boolean,
+): PhaseOneEvidence {
+  const timeText = observation.recordTime ? formatHongKongTimeShort(observation.recordTime) : "the official record time";
+  const observedValue = `${observation.valuePercent}%`;
+  const claimedValue = `${claim.valuePercent}%`;
+  const location = observation.station ?? observation.scope;
+  const excerpt =
+    claim.operator === "eq" || claim.operator === "approx"
+      ? `${observation.scope} recorded ${observedValue} at ${timeText}. Claimed relative humidity: ${claim.operator === "approx" ? "around " : ""}${claimedValue}. Difference: ${differencePercent} percentage points. Tolerance: ±${claim.tolerancePercent} percentage points.`
+      : `${observation.scope} recorded ${observedValue} at ${timeText}. The claim requires the relative humidity to be ${operatorPhrase(claim.operator)} ${claimedValue}.`;
+
+  return officialHkoEvidence({
+    id: `hko-rhrread-humidity-${hashStable(`${claimId}-${location}-${observation.recordTime ?? ""}`)}`,
+    dataType: "rhrread",
+    title: observation.station
+      ? `Current Relative Humidity at ${formatStationForTitle(observation.station)}`
+      : "Current Relative Humidity",
+    summary:
+      claim.operator === "eq" || claim.operator === "approx"
+        ? `HKO rhrread relative humidity observation. Observation scope: ${observation.scope}. Observed relative humidity: ${observedValue}. Claimed relative humidity: ${claim.operator === "approx" ? "around " : ""}${claimedValue}. Difference: ${differencePercent} percentage points. Tolerance: ±${claim.tolerancePercent} percentage points. Reference station policy: unspecified Hong Kong current-relative-humidity claims use the Hong Kong Observatory station when a station observation is available; otherwise VeriHK uses the official territory-level humidity observation.`
+        : `HKO rhrread relative humidity observation. Observation scope: ${observation.scope}. Observed relative humidity: ${observedValue}. ${numericRequirementPhrase("relative humidity", claim.operator, claimedValue)}. Reference station policy: unspecified Hong Kong current-relative-humidity claims use the Hong Kong Observatory station when a station observation is available; otherwise VeriHK uses the official territory-level humidity observation.`,
+    retrievedAt: observation.retrievedAt,
+    updatedAt: observation.updatedAt,
+    publishedAt: observation.recordTime,
+    category: "current_weather_observation",
+    extra: {
+      excerpt,
+      relevance_score: 10,
+      structured_facts: {
+        metric: "relative_humidity",
+        observedValue: observation.valuePercent,
+        observedHumidityPercent: observation.valuePercent,
+        operator: claim.operator,
+        claimedValue: claim.valuePercent,
+        unit: "percent",
+        comparisonResult,
+        station: observation.station,
+        observationScope: observation.scope,
+        observationTime: observation.recordTime,
+        freshness: "fresh",
+        retrievedAt: observation.retrievedAt,
+      },
+    },
+  });
+}
+
+function buildNumericComparisonExplanation({
+  metricLabel,
+  locationLabel,
+  officialValueText,
+  observedTimeText,
+  operator,
+  claimedValueText,
+  toleranceText,
+  supported,
+}: {
+  metricLabel: string;
+  locationLabel: string;
+  officialValueText: string;
+  observedTimeText: string;
+  operator: NumericComparisonOperator;
+  claimedValueText: string;
+  toleranceText: string;
+  supported: boolean;
+}): string {
+  if (operator === "eq" || operator === "approx") {
+    const qualifier = operator === "approx" ? "around " : "";
+    const rangeType = operator === "approx" ? "approximation" : "exact";
+    return supported
+      ? `The ${locationLabel} recorded ${officialValueText}${observedTimeText}. The claim states ${qualifier}${claimedValueText}, which is within the accepted ${toleranceText} ${rangeType} range.`
+      : `The ${locationLabel} recorded ${officialValueText}${observedTimeText}. The claim states ${qualifier}${claimedValueText}, which is outside the accepted ${toleranceText} ${rangeType} range.`;
+  }
+
+  return supported
+    ? `The ${locationLabel} recorded ${officialValueText}${observedTimeText}. Since ${officialValueText} is ${operatorPhrase(operator)} ${claimedValueText}, the claim is supported.`
+    : `The ${locationLabel} recorded ${officialValueText}${observedTimeText}. Since ${officialValueText} is not ${operatorPhrase(operator)} ${claimedValueText}, the claim is refuted.`;
+}
+
+function numericRequirementPhrase(
+  metricLabel: string,
+  operator: NumericComparisonOperator,
+  claimedValueText: string,
+): string {
+  return `The claim requires the ${metricLabel} to be ${operatorPhrase(operator)} ${claimedValueText}`;
+}
+
+function operatorPhrase(operator: NumericComparisonOperator): string {
+  if (operator === "gt") return "above";
+  if (operator === "gte") return "at least";
+  if (operator === "lt") return "below";
+  if (operator === "lte") return "at most";
+  if (operator === "approx") return "around";
+  return "exactly";
+}
+
+function formatStationForTitle(station: string): string {
+  return normalizeText(station) === normalizeText(DEFAULT_TEMPERATURE_STATION)
+    ? `the ${station}`
+    : station;
 }
 
 function evaluateGeneralWeatherClaim(claim: PhaseOneClaim, hko: HkoBundle): EvaluatedClaim {
@@ -677,6 +1285,39 @@ function evaluateEducationClaim(claim: PhaseOneClaim, rss: SourceSnapshot): Eval
     0.76,
     "VeriHK found live RSS item(s) that directly mention school or class suspension, but the prototype does not yet determine full entailment for tomorrow-specific claims.",
     "Read the attached EDB or Government News item and confirm date, class type and coverage before acting.",
+    "medium",
+  );
+}
+
+function evaluateGeneralGovernmentClaim(claim: PhaseOneClaim, rss: SourceSnapshot): EvaluatedClaim {
+  const matches = rss.evidence
+    .filter((item) => item.freshness === "fresh")
+    .filter((item) => item.source_key === "govnews" || item.source_key === "edb")
+    .map((item) => ({ item, score: scoreGeneralGovernmentEvidence(item, claim.text) }))
+    .filter(({ score }) => score >= MIN_RELEVANCE_SCORE)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map(({ item, score }) => ({ ...item, relevance_score: score }));
+
+  if (!matches.length) {
+    return withVerdict(
+      claim,
+      "insufficient_evidence",
+      [],
+      0.5,
+      "Selected official government news feeds were checked, but no directly relevant current official evidence was found for this claim.",
+      "Check the relevant official government source directly or retry with a more specific policy, department, date or announcement title.",
+      "low",
+    );
+  }
+
+  return withVerdict(
+    claim,
+    "insufficient_evidence",
+    matches,
+    0.62,
+    "Relevant official government text was found. VeriHK will compare the claim against the supplied evidence without using outside knowledge.",
+    "Read the attached official source and verify whether it establishes the full claim.",
     "medium",
   );
 }
@@ -790,14 +1431,18 @@ export function hkoSnapshotFromPayload(
   payload: Record<string, unknown>,
   retrievedAt: string,
 ): SourceSnapshot {
-  const warnings = Object.entries(payload).flatMap(([key, value]) =>
+  const warningEntries = getWarnsumEntries(payload);
+  const warnings = warningEntries.flatMap(([key, value]) =>
     normalizeHkoWarning(key, value, retrievedAt),
   );
+  logWarnsumDiagnostics(payload, warningEntries, warnings);
   const latestUpdatedAt = latestIso(warnings.map((item) => item.updated_at));
+  const summaryEvidence = createWarnsumSummaryEvidence(warnings, retrievedAt, latestUpdatedAt);
+  const evidence = [...warnings, summaryEvidence];
 
   return hkoSnapshot(
     "warnsum",
-    warnings,
+    evidence,
     retrievedAt,
     latestUpdatedAt,
     warnings.length
@@ -805,6 +1450,37 @@ export function hkoSnapshotFromPayload(
       : "Fetched HKO Current Weather Warning Summary; no active warning records were present.",
     payload,
   );
+}
+
+function getWarnsumEntries(payload: Record<string, unknown>): Array<[string, unknown]> {
+  const directEntries = Object.entries(payload).filter(([, value]) => isRecord(value));
+  if (directEntries.length) return directEntries;
+
+  const warnings = payload.warnings ?? payload.warning;
+  if (Array.isArray(warnings)) {
+    return warnings.map((value, index) => {
+      const key = isRecord(value) ? getString(value.code) || getString(value.type) : null;
+      return [key || `warning-${index + 1}`, value] as [string, unknown];
+    });
+  }
+
+  return [];
+}
+
+function logWarnsumDiagnostics(
+  payload: Record<string, unknown>,
+  warningEntries: Array<[string, unknown]>,
+  warnings: PhaseOneEvidence[],
+): void {
+  if (process.env.NODE_ENV !== "development") return;
+  const activeWarningCount = warningEntries.filter(([, value]) => isActiveWarnsumRecord(value)).length;
+  console.info("[VeriHK HKO warnsum]", {
+    rawJsonKeys: Object.keys(payload),
+    objectKeys: Object.keys(payload),
+    normalizedWarningCount: warnings.length,
+    normalizedWarningCodes: warnings.map(getEvidenceCode),
+    activeWarningCount,
+  });
 }
 
 export function warningInfoSnapshotFromPayload(
@@ -935,6 +1611,7 @@ export function rhrreadSnapshotFromPayload(
 
 function normalizeHkoWarning(key: string, value: unknown, retrievedAt: string): PhaseOneEvidence[] {
   if (!isRecord(value)) return [];
+  if (!isActiveWarnsumRecord(value)) return [];
 
   const rawCode = getString(value.code);
   const code = normalizeWarningCode(rawCode, getString(value.type), key);
@@ -944,7 +1621,8 @@ function normalizeHkoWarning(key: string, value: unknown, retrievedAt: string): 
   const title = warningDisplayName(code, name || type || key);
   const updatedAt = parseOfficialDate(getString(value.updateTime) || getString(value.issueTime));
   const publishedAt = parseOfficialDate(getString(value.issueTime));
-  const summaryParts = [title, code, actionCode, type].filter(Boolean);
+  const expireAt = parseOfficialDate(getString(value.expireTime));
+  const summaryParts = [title, code, actionCode, type, expireAt ? `Expires ${expireAt}` : null].filter(Boolean);
 
   return [
     officialHkoEvidence({
@@ -958,9 +1636,79 @@ function normalizeHkoWarning(key: string, value: unknown, retrievedAt: string): 
       category: "weather_warning",
       extra: {
         excerpt: `${title} is active in the HKO current weather warning summary.`,
+        structured_facts: {
+          evidence_type: "active_weather_warning",
+          code,
+          name: title,
+          actionCode,
+          issueTime: publishedAt,
+          expireTime: expireAt,
+          updateTime: updatedAt,
+        },
       },
     }),
   ];
+}
+
+function createWarnsumSummaryEvidence(
+  warnings: PhaseOneEvidence[],
+  retrievedAt: string,
+  updatedAt: string | null,
+): PhaseOneEvidence {
+  const activeWarningCodes = warnings.map(getEvidenceCode).filter(Boolean);
+  const activeWarningNames = warnings.map((item) => item.title);
+  return officialHkoEvidence({
+    id: "hko-warnsum-current",
+    dataType: "warnsum",
+    title: "HKO Current Weather Warning Summary",
+    summary: activeWarningNames.length
+      ? `HKO current warning summary lists ${activeWarningNames.length} active warning(s): ${activeWarningNames.join(", ")}.`
+      : "HKO current warning summary lists zero active weather warnings.",
+    retrievedAt,
+    updatedAt,
+    publishedAt: updatedAt,
+    category: "weather_warning_summary",
+    extra: {
+      excerpt: activeWarningNames.length
+        ? `Active warnings: ${activeWarningNames.join(", ")}.`
+        : "No active weather warnings are listed in the current HKO warning summary.",
+      structured_facts: {
+        evidence_id: "hko-warnsum-current",
+        evidence_type: "current_warning_summary",
+        source: "Hong Kong Observatory",
+        facts: {
+          active_warning_count: activeWarningNames.length,
+          active_warning_codes: activeWarningCodes,
+          active_warning_names: activeWarningNames,
+          active_warnings: warnings.map((item) => ({
+            code: getEvidenceCode(item),
+            name: item.title,
+            issueTime: item.published_at,
+            expireTime: getWarnsumExpireTime(item),
+            updateTime: item.updated_at,
+          })),
+        },
+        freshness: updatedAt && isStale(updatedAt) ? "stale" : "fresh",
+        official_update: updatedAt,
+        retrieved_at: retrievedAt,
+      },
+    },
+  });
+}
+
+function isActiveWarnsumRecord(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const actionCode = normalizeText(getString(value.actionCode) ?? "");
+  if (/(cancel|cancelled|canceled)/.test(actionCode)) return false;
+
+  const expireAt = parseOfficialDate(getString(value.expireTime));
+  if (!expireAt) return true;
+  return Date.parse(expireAt) > Date.now();
+}
+
+function getWarnsumExpireTime(evidence: PhaseOneEvidence): string | null {
+  const value = evidence.structured_facts?.expireTime;
+  return typeof value === "string" ? value : null;
 }
 
 function normalizeWarningInfo(
@@ -1230,6 +1978,7 @@ function normalizeWarningCode(code: string | null, type: string | null, fallback
   if (value.includes("black") || value.includes("wrainb")) return "WRAINB";
   if (value.includes("red") || value.includes("wrainr")) return "WRAINR";
   if (value.includes("amber") || value.includes("wraina")) return "WRAINA";
+  if (value.includes("thunderstorm") || value.includes("wts")) return "WTS";
   if (value.includes("tc8se")) return "TC8SE";
   if (value.includes("tc8ne")) return "TC8NE";
   if (value.includes("tc8sw")) return "TC8SW";
@@ -1263,6 +2012,14 @@ function getEvidenceCode(evidence: PhaseOneEvidence): string {
 
 function getEvidenceWarningGroup(evidence: PhaseOneEvidence): string {
   return WARNING_GROUP_BY_CODE[getEvidenceCode(evidence)] ?? "";
+}
+
+function isWarnsumSummaryEvidence(evidence: PhaseOneEvidence): boolean {
+  return evidence.id === "hko-warnsum-current";
+}
+
+function getWarnsumSummaryEvidence(warnsum: SourceSnapshot): PhaseOneEvidence | undefined {
+  return warnsum.evidence.find(isWarnsumSummaryEvidence);
 }
 
 function extractTemperatureClaim(
@@ -1343,6 +2100,20 @@ function calculateCoverage(
   claims: EvaluatedClaim[],
   snapshots: SourceSnapshot[],
 ): EvidenceCoverage {
+  if (
+    claims.some(
+      (claim) =>
+        (claim.verdict === "supported" || claim.verdict === "refuted") &&
+        claim.evidence.some(
+          (item) =>
+            item.freshness === "fresh" &&
+            (item.source_authority === "official" || item.source_key === "hko" || item.source_key === "td") &&
+            (item.relevance_score === undefined || item.relevance_score >= 8),
+        ),
+    )
+  ) {
+    return "high";
+  }
   if (claims.some((claim) => claim.coverage === "high")) return "high";
   if (claims.some((claim) => claim.coverage === "medium")) return "medium";
   if (claims.some((claim) => claim.coverage === "low")) return "low";
@@ -1603,6 +2374,20 @@ function scoreEducationEvidence(evidence: PhaseOneEvidence, claimText: string): 
   return score;
 }
 
+function scoreGeneralGovernmentEvidence(evidence: PhaseOneEvidence, claimText: string): number {
+  const haystack = normalizeText(`${evidence.title} ${evidence.summary}`);
+  const claim = normalizeText(claimText);
+  const claimTokens = meaningfulTokens(claim);
+  const matchedTokens = claimTokens.filter((token) => haystack.includes(token));
+  let score = Math.min(matchedTokens.length, 6);
+
+  if (evidence.source_key === "govnews") score += 1;
+  for (const term of ["government", "department", "bureau", "policy", "announcement", "public"]) {
+    if (claim.includes(term) && haystack.includes(term)) score += 2;
+  }
+  return score;
+}
+
 function scoreTrafficEvidence(evidence: PhaseOneEvidence, claimText: string): number {
   const haystack = normalizeText(`${evidence.title} ${evidence.summary}`);
   const claim = normalizeText(claimText);
@@ -1619,6 +2404,55 @@ function scoreTrafficEvidence(evidence: PhaseOneEvidence, claimText: string): nu
   }
 
   return score;
+}
+
+function meaningfulTokens(value: string): string[] {
+  const stopWords = new Set([
+    "the",
+    "and",
+    "that",
+    "this",
+    "with",
+    "from",
+    "will",
+    "has",
+    "have",
+    "are",
+    "was",
+    "were",
+    "hong",
+    "kong",
+  ]);
+  return [...new Set(value.split(" ").filter((token) => token.length >= 4 && !stopWords.has(token)))];
+}
+
+function logAdjudicatorSkip(claim: PhaseOneClaim, reason: string): void {
+  if (process.env.GEMINI_DEBUG !== "true") return;
+  console.info("Evidence adjudicator diagnostic", {
+    claimId: claim.id,
+    deterministicResult: claim.verdict,
+    adjudicatorCalled: false,
+    evidenceCount: claim.evidence.length,
+    evidenceIds: claim.evidence.map((item) => item.id),
+    validationRejectionReason: reason,
+  });
+}
+
+function logAdjudicatorValidation(
+  claim: PhaseOneClaim,
+  rejectionReason?: string,
+  finalVerdict?: ReportVerdict,
+): void {
+  if (process.env.GEMINI_DEBUG !== "true") return;
+  console.info("Evidence adjudicator diagnostic", {
+    claimId: claim.id,
+    deterministicResult: claim.verdict,
+    adjudicatorCalled: true,
+    evidenceCount: claim.evidence.length,
+    evidenceIds: claim.evidence.map((item) => item.id),
+    validatedFinalVerdict: finalVerdict ?? "insufficient_evidence",
+    validationRejectionReason: rejectionReason ?? null,
+  });
 }
 
 function unavailableSnapshot(
@@ -1680,6 +2514,18 @@ function getNestedNumber(value: unknown): number | null {
   return null;
 }
 
+function fahrenheitToCelsius(value: number): number {
+  return ((value - 32) * 5) / 9;
+}
+
+function roundOne(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function formatTemperatureC(value: number): string {
+  return `${Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1)}°C`;
+}
+
 function extractRoadLocationTerms(text: string): string[] {
   const terms = text.match(/\b[a-z]+(?:\s+[a-z]+){0,2}\s+(?:road|street|highway|tunnel|bypass)\b/g);
   return terms ?? [];
@@ -1727,6 +2573,17 @@ export function formatHongKongTime(value: string | null): string {
     dateStyle: "medium",
     timeStyle: "medium",
     timeZone: HK_TIME_ZONE,
+  }).format(new Date(value));
+}
+
+function formatHongKongTimeShort(value: string): string {
+  return new Intl.DateTimeFormat("en-HK", {
+    timeZone: HK_TIME_ZONE,
+    hour: "numeric",
+    minute: "2-digit",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
   }).format(new Date(value));
 }
 

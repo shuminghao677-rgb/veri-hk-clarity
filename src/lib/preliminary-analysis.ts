@@ -5,14 +5,19 @@ import {
   type AnalyzeTextInput,
   type PhaseOneClaim,
   type PhaseOneReport,
+  type TrafficGenerationMetadata,
+  type VerificationDiagnostics,
+  type VerificationMode,
 } from "@/lib/report-contract";
 import {
+  classifyClaim,
   retrieveLiveEvidence,
   type EvidenceRetrievalResult,
   type SourceFreshnessSummary,
 } from "@/lib/live-sources";
+import { normalizeVerificationMode } from "@/lib/verification-mode";
 
-const DEFAULT_AI_MODEL = "gemini-3.5-flash";
+const DEFAULT_AI_MODEL = "gemini-3.1-flash-lite";
 const GEMINI_MAX_ATTEMPTS = 4;
 const GEMINI_RETRY_DELAYS_MS = [1000, 2000, 4000] as const;
 const GEMINI_ATTEMPT_TIMEOUT_MS = Number(process.env.GEMINI_ATTEMPT_TIMEOUT_MS || 35_000);
@@ -85,7 +90,7 @@ export class AnalysisError extends Error {
 export const analyzeText = createServerFn({ method: "POST" })
   .validator((input: AnalyzeTextInput) => validateAnalyzeInput(input))
   .handler(async ({ data }) => {
-    return buildReport(data.text);
+    return buildReport(data.text, data.mode, data.trafficGenerationMetadata);
   });
 
 function validateAnalyzeInput(input: AnalyzeTextInput): AnalyzeTextInput {
@@ -105,18 +110,29 @@ function validateAnalyzeInput(input: AnalyzeTextInput): AnalyzeTextInput {
     );
   }
 
-  return { text };
+  return {
+    text,
+    mode: normalizeVerificationMode(input.mode),
+    trafficGenerationMetadata: normalizeTrafficGenerationMetadata(input.trafficGenerationMetadata),
+  };
 }
 
-async function buildReport(text: string): Promise<PhaseOneReport> {
+async function buildReport(
+  text: string,
+  mode: VerificationMode = "auto",
+  trafficGenerationMetadata?: TrafficGenerationMetadata,
+): Promise<PhaseOneReport> {
   const extractedClaims = await extractClaims(text);
-  const evidenceSnapshot = await retrieveEvidence(extractedClaims);
+  enforceVerificationMode(extractedClaims, mode);
+  const evidenceSnapshot = await retrieveEvidence(extractedClaims, trafficGenerationMetadata);
   const report = assembleReport(
     text,
+    mode,
     evidenceSnapshot.claims,
     evidenceSnapshot.freshness,
     evidenceSnapshot.counts,
     evidenceSnapshot.coverage,
+    evidenceSnapshot.diagnostics?.adjudicatorCalled ?? false,
   );
 
   if (!isPhaseOneReport(report)) {
@@ -137,16 +153,51 @@ async function extractClaims(text: string): Promise<PhaseOneClaim[]> {
   return claims.slice(0, 3);
 }
 
-async function retrieveEvidence(claims: PhaseOneClaim[]): Promise<EvidenceRetrievalResult> {
-  return retrieveLiveEvidence(claims);
+async function retrieveEvidence(
+  claims: PhaseOneClaim[],
+  trafficGenerationMetadata?: TrafficGenerationMetadata,
+): Promise<EvidenceRetrievalResult> {
+  return retrieveLiveEvidence(claims, {}, { trafficGenerationMetadata });
+}
+
+function normalizeTrafficGenerationMetadata(
+  value: unknown,
+): TrafficGenerationMetadata | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const metadata = value as Partial<TrafficGenerationMetadata>;
+  if (
+    typeof metadata.sourceRecordId !== "string" ||
+    !metadata.sourceRecordId.trim() ||
+    (metadata.generatedClaimKind !== "supported" && metadata.generatedClaimKind !== "refuted") ||
+    typeof metadata.generatedSemanticField !== "string" ||
+    !metadata.generatedSemanticField.trim() ||
+    typeof metadata.generatedAt !== "string" ||
+    Number.isNaN(Date.parse(metadata.generatedAt))
+  ) {
+    return undefined;
+  }
+  return {
+    sourceRecordId: metadata.sourceRecordId,
+    sourceOfficialUpdatedAt:
+      typeof metadata.sourceOfficialUpdatedAt === "string"
+        ? metadata.sourceOfficialUpdatedAt
+        : undefined,
+    sourceCurrentStatus:
+      typeof metadata.sourceCurrentStatus === "string" ? metadata.sourceCurrentStatus : undefined,
+    generatedClaimKind: metadata.generatedClaimKind,
+    generatedSemanticField: metadata.generatedSemanticField,
+    generatedAt: metadata.generatedAt,
+  };
 }
 
 function assembleReport(
   text: string,
+  mode: VerificationMode,
   claims: PhaseOneClaim[],
   sourceFreshness: SourceFreshnessSummary[],
   counts: EvidenceRetrievalResult["counts"],
   coverage: EvidenceRetrievalResult["coverage"],
+  adjudicatorCalled: boolean,
 ): PhaseOneReport {
   const averageConfidence =
     claims.reduce((total, claim) => total + claim.confidence, 0) / Math.max(claims.length, 1);
@@ -160,8 +211,112 @@ function assembleReport(
     evidence_coverage: coverage,
     source_freshness: sourceFreshness,
     retrieval_counts: counts,
+    diagnostics: buildVerificationDiagnostics(mode, claims, sourceFreshness, counts, adjudicatorCalled),
     claims,
   };
+}
+
+function enforceVerificationMode(claims: PhaseOneClaim[], mode: VerificationMode): void {
+  if (mode === "auto") return;
+
+  const categories = claims.map((claim) => classifyClaim(claim.text));
+  if (mode === "weather" && categories.some(isTrafficCategory)) {
+    throw new AnalysisError(
+      "This appears to be a traffic claim. Please switch to Traffic mode or Auto Detect.",
+      422,
+      "verification_mode_mismatch",
+    );
+  }
+  if (mode === "traffic" && categories.some(isWeatherCategory)) {
+    throw new AnalysisError(
+      "This appears to be a weather claim. Please switch to Weather mode or Auto Detect.",
+      422,
+      "verification_mode_mismatch",
+    );
+  }
+}
+
+function buildVerificationDiagnostics(
+  mode: VerificationMode,
+  claims: PhaseOneClaim[],
+  sourceFreshness: SourceFreshnessSummary[],
+  counts: EvidenceRetrievalResult["counts"],
+  adjudicatorCalled: boolean,
+): VerificationDiagnostics {
+  const source = selectDiagnosticSource(mode, claims, sourceFreshness);
+  const sourceFreshnessItem = sourceFreshness.find((item) =>
+    source === "HKO" ? item.source_key === "hko" : item.source_key === "td",
+  );
+  const relevantEvidence =
+    counts.unique_relevant_evidence_records ?? counts.relevant_evidence_attached;
+  const anyFresh = sourceFreshness.some((item) => item.freshness === "fresh");
+  const anyStale = sourceFreshness.some((item) => item.freshness === "stale");
+
+  return {
+    mode,
+    routedSource: source,
+    endpointLabel: getEndpointLabel(source, claims),
+    recordsRetrieved: counts.feed_items_fetched,
+    relevantEvidence,
+    parsingStatus:
+      counts.official_sources_queried === 0 ? "failed" : anyFresh ? "success" : anyStale ? "partial" : "failed",
+    matchingStatus: relevantEvidence > 0 ? "matched" : "no_match",
+    deterministicResult: getPrimaryVerdict(claims),
+    adjudicatorCalled,
+    freshness: anyFresh ? "fresh" : anyStale ? "stale" : undefined,
+    officialUpdatedAt: sourceFreshnessItem?.updated_at ?? undefined,
+  };
+}
+
+function selectDiagnosticSource(
+  mode: VerificationMode,
+  claims: PhaseOneClaim[],
+  sourceFreshness: SourceFreshnessSummary[],
+): "HKO" | "TD" {
+  if (mode === "weather") return "HKO";
+  if (mode === "traffic") return "TD";
+  if (claims.some((claim) => claim.evidence.some((item) => item.source_key === "td"))) return "TD";
+  if (claims.some((claim) => claim.evidence.some((item) => item.source_key === "hko"))) return "HKO";
+  if (sourceFreshness.some((item) => item.source_key === "td")) return "TD";
+  return "HKO";
+}
+
+function getEndpointLabel(source: "HKO" | "TD", claims: PhaseOneClaim[]): string {
+  if (source === "TD") return "TD Special Traffic News XML";
+  const hasWarning = claims.some((claim) =>
+    claim.evidence.some((item) => item.source_key === "hko" && item.source_type === "hko_warning"),
+  );
+  return hasWarning ? "HKO Current Warning Summary" : "HKO Weather API";
+}
+
+function getPrimaryVerdict(claims: PhaseOneClaim[]) {
+  return claims.find((claim) => claim.verdict !== "insufficient_evidence")?.verdict ?? "insufficient_evidence";
+}
+
+function isWeatherCategory(category: string): boolean {
+  return (
+    category === "active_weather_warning" ||
+    category === "future_weather_forecast" ||
+    category === "current_weather_observation" ||
+    category === "recent_rainfall" ||
+    category === "visibility" ||
+    category === "lightning" ||
+    category === "weather_general"
+  );
+}
+
+function isTrafficCategory(category: string): boolean {
+  return (
+    category === "traffic_road_closure" ||
+    category === "public_transport_disruption" ||
+    category === "public_transport_service_normal" ||
+    category === "public_transport_delay" ||
+    category === "public_transport_suspension" ||
+    category === "public_transport_cancellation" ||
+    category === "public_transport_adjustment" ||
+    category === "public_transport_resumed" ||
+    category === "public_transport_cause_claim"
+  );
 }
 
 async function requestPreliminaryAnalysis(text: string): Promise<RawModelReport> {

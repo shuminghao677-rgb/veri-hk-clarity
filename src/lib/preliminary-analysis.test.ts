@@ -1,3 +1,4 @@
+import { describe, it } from "vitest";
 import { AnalysisError, requestPreliminaryAnalysisForTest } from "./preliminary-analysis";
 
 export async function runPreliminaryAnalysisTests(): Promise<void> {
@@ -8,6 +9,12 @@ export async function runPreliminaryAnalysisTests(): Promise<void> {
   await testRetryAfterIsRespected();
   await testTimeoutIsHandled();
 }
+
+describe("preliminary analysis Gemini reliability", () => {
+  it("retries transient failures and handles final errors", async () => {
+    await runPreliminaryAnalysisTests();
+  });
+});
 
 async function test503ThenSuccess(): Promise<void> {
   const calls: string[] = [];
