@@ -65,7 +65,12 @@ export function MouseRipples() {
     <div className="pointer-events-none fixed inset-0 z-[100] overflow-hidden">
       <div
         ref={glowRef}
-        className="absolute top-0 left-0 h-7 w-7 rounded-full bg-primary/20 blur-md"
+        className="absolute top-0 left-0 h-10 w-10 rounded-full bg-primary/15 blur-lg"
+        style={{ willChange: "transform" }}
+      />
+      <div
+        ref={glowRef}
+        className="absolute top-0 left-0 h-3 w-3 rounded-full bg-primary/30 blur-[2px]"
         style={{ willChange: "transform" }}
       />
       {ripples.map((ripple) => (
