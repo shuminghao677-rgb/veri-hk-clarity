@@ -10,7 +10,7 @@ export function MouseRipples() {
   const [mounted, setMounted] = useState(false);
   const [ripples, setRipples] = useState<Ripple[]>([]);
   const idRef = useRef(0);
-  const glowRef = useRef<HTMLDivElement | null>(null);
+  const cursorRef = useRef<HTMLDivElement | null>(null);
   const targetRef = useRef({ x: 0, y: 0 });
   const currentRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef<number | null>(null);
@@ -23,11 +23,11 @@ export function MouseRipples() {
     };
 
     const animate = () => {
-      const glow = glowRef.current;
-      if (glow) {
-        currentRef.current.x = lerp(currentRef.current.x, targetRef.current.x, 0.14);
-        currentRef.current.y = lerp(currentRef.current.y, targetRef.current.y, 0.14);
-        glow.style.transform = `translate3d(${currentRef.current.x}px, ${currentRef.current.y}px, 0) translate(-50%, -50%)`;
+      const cursor = cursorRef.current;
+      if (cursor) {
+        currentRef.current.x = lerp(currentRef.current.x, targetRef.current.x, 0.12);
+        currentRef.current.y = lerp(currentRef.current.y, targetRef.current.y, 0.12);
+        cursor.style.transform = `translate3d(${currentRef.current.x}px, ${currentRef.current.y}px, 0) translate(-50%, -50%)`;
       }
       rafRef.current = requestAnimationFrame(animate);
     };
@@ -64,15 +64,13 @@ export function MouseRipples() {
   return (
     <div className="pointer-events-none fixed inset-0 z-[100] overflow-hidden">
       <div
-        ref={glowRef}
-        className="absolute top-0 left-0 h-10 w-10 rounded-full bg-primary/15 blur-lg"
+        ref={cursorRef}
+        className="absolute top-0 left-0"
         style={{ willChange: "transform" }}
-      />
-      <div
-        ref={glowRef}
-        className="absolute top-0 left-0 h-3 w-3 rounded-full bg-primary/30 blur-[2px]"
-        style={{ willChange: "transform" }}
-      />
+      >
+        <div className="absolute -inset-5 rounded-full bg-primary/12 blur-lg" />
+        <div className="absolute inset-0 rounded-full bg-primary/25 blur-[2px]" />
+      </div>
       {ripples.map((ripple) => (
         <span
           key={ripple.id}
